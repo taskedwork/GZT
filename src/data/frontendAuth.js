@@ -106,27 +106,29 @@ function roleLabelForRole(role) {
   return role
 }
 
+// 预置成员数据（从后端 users.json 导入，密码已 bcrypt 哈希）
+const PRESET_USERS = [
+  { id: 'u1', username: 'admin', password: '$2a$10$LNVz.jSdJNsI5v3OLJS81.LW3Uae9KNNNXU.d3NCo6Y9bwXOWUZsa', name: '深东', systemRole: 'manager', avatar: '👑', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u2', username: 'member1', password: '$2a$10$cajAEuALjQyEoIXBMN3Rteu4dB8jY8Vcqo/ln4T736S1cTHXcoZl.', name: '东哥哥', systemRole: 'partner', avatar: '🤝', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u3', username: 'member2', password: '$2a$10$kTNgH6ySeJ8lNRkGEgjFSO3l9omrl8Q5ePvMQ17KC2dSQeWQtzIbq', name: '老蔡', systemRole: 'partner', avatar: '🤝', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u4', username: 'member3', password: '$2a$10$JHBO0CeV2cnkIIbbE5kVbOJr4MJkbaX9WuAStU7fRUoXFWzZpiA/u', name: '小北哥', systemRole: 'partner', avatar: '🤝', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u5', username: 'member4', password: '$2a$10$FvLX9hkfBTjP26Et6A8y1u5Q.kqHB/rXSVveFDDdMpvibxOWq0wIi', name: '孙博文', systemRole: 'partner', avatar: '🤝', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u6', username: 'member5', password: '$2a$10$k2h9D.OOnRy7KiZo1YCSl.5qM0wpz.q4PBQlb81GZ3J77kxv50M9i', name: '财务王姐', systemRole: 'partner', avatar: '🤝', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u7', username: 'outsource1', password: '$2a$10$vcCRoiv8/3HpFCAHC6Mb.OvrqtviYlArpMEilc1boXr8hU.vvlPOu', name: '灯光', systemRole: 'outsider', avatar: '👁', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u8', username: 'outsource2', password: '$2a$10$9lDN9iHXq0ehB/IDZt3QOuUVdB6NKAY9z2sT5n7VU5nxBBBzp3Et.', name: '施工图', systemRole: 'outsider', avatar: '👁', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'u9', username: 'outsource3', password: '$2a$10$h/BkURVA/CLCkRaHRdf/CuA/Y/kak1Kou61AKj8moIA8L21La6NPO', name: '其他', systemRole: 'outsider', avatar: '👁', createdAt: '2024-01-01T00:00:00Z' },
+  { id: 'caf75c35-1464-4fce-8dc5-41c12d8e4324', username: 'tm_1782319950821', password: '$2a$10$mOqTaC9KK/70D//WFNf0Ne4I/dmflw8HoYMXEfcbrhQRQmnS1YrR6', name: '小朋友', systemRole: 'partner', avatar: '🤝', createdAt: '2026-06-24T16:52:30.880Z' },
+]
+
 /**
  * 首次使用时初始化默认用户
- * 如果 IndexedDB 中没有用户，创建一个管理员账号
+ * 如果 IndexedDB 中没有用户，导入预置成员数据
  */
 export async function initDefaultUsers() {
   const users = await getAllUsers()
   if (users.length > 0) return false
 
-  const hashed = await hashPassword(DEFAULT_PASSWORD)
-  const now = new Date().toISOString()
-
-  const admin = {
-    id: generateId(),
-    username: 'admin',
-    password: hashed,
-    name: '管理员',
-    systemRole: 'manager',
-    avatar: avatarForRole('manager'),
-    createdAt: now,
-  }
-  await saveUser(admin)
+  await saveAllUsers(PRESET_USERS)
   return true
 }
 
