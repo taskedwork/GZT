@@ -39,6 +39,20 @@ router.get('/users', (req, res) => {
 });
 
 /**
+ * GET /api/admin/users/export - 导出完整用户数据（含密码哈希，用于 Gist 同步）
+ * 仅管理员可访问，数据通过 AES-GCM 加密后上传到 Gist
+ */
+router.get('/users/export', (req, res) => {
+  try {
+    const users = readJSON(USERS_FILE) || [];
+    res.json({ users });
+  } catch (err) {
+    console.error('导出用户数据失败:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+/**
  * POST /api/admin/users - 创建用户
  * 请求体: { username, password, name, systemRole }
  */

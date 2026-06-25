@@ -72,6 +72,12 @@ export const authAPI = {
   }),
 }
 
+// ===== 管理员 API =====
+export const adminAPI = {
+  // 导出完整用户数据（含密码哈希，用于 Gist 同步）
+  exportUsers: () => request('/admin/users/export'),
+}
+
 // ===== 项目 API =====
 export const projectAPI = {
   // 获取项目列表

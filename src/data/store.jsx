@@ -8,7 +8,7 @@
  */
 
 import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect, useRef, useState } from 'react'
-import { authAPI, projectAPI, setToken, clearToken, getStoredUser, setStoredUser, clearStoredUser } from './api'
+import { authAPI, projectAPI, adminAPI, setToken, clearToken, getStoredUser, setStoredUser, clearStoredUser } from './api'
 import syncClient from './sync'
 import { pushToGist, pullFromGist, getSyncInfo } from './gistSync'
 import {
@@ -1110,6 +1110,14 @@ export function AppProvider({ children }) {
       }
       if (frontendModeRef.current) {
         payload.users = await dbGetAllUsers()
+      } else {
+        // 后端模式：从后端导出完整用户数据（含密码哈希）
+        try {
+          const res = await adminAPI.exportUsers()
+          if (res.users) payload.users = res.users
+        } catch (err) {
+          console.warn('后端导出用户数据失败:', err)
+        }
       }
 
       const result = await pushToGist(token, payload)
