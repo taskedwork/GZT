@@ -1,11 +1,19 @@
 /**
  * API 客户端 - 与后端服务通信
  * 本地 preview：/api（通过 vite proxy 转发）
- * GitHub Pages / 本地 dev：http://localhost:3001/api（直连本地后端）
+ * GitHub Pages / 本地 dev：http://<serverHost>:3001/api（直连本地或局域网后端）
+ * 服务器地址可通过 URL 参数 ?server=192.168.1.100 配置，或 localStorage 持久化
  */
 
+// 从 URL 参数读取服务器地址并持久化（支持平板连接电脑后端）
+const urlServer = new URLSearchParams(window.location.search).get('server')
+if (urlServer) {
+  localStorage.setItem('sdd_server_host', urlServer)
+}
+
 const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
-const API_BASE = isLocalPreview ? '/api' : 'http://localhost:3001/api'
+const serverHost = localStorage.getItem('sdd_server_host') || 'localhost'
+const API_BASE = isLocalPreview ? '/api' : `http://${serverHost}:3001/api`
 
 // 获取存储的 token
 function getToken() {

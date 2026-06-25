@@ -15,22 +15,37 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
   const [loadFailed, setLoadFailed] = useState(false)
+  const [serverInput, setServerInput] = useState(localStorage.getItem('sdd_server_host') || 'localhost')
+  const [showServerConfig, setShowServerConfig] = useState(false)
 
   // 从后端加载用户列表
-  useEffect(() => {
+  const loadUsers = () => {
     const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
-    const API_BASE = isLocalPreview ? '/api' : 'http://localhost:3001/api'
+    const serverHost = localStorage.getItem('sdd_server_host') || 'localhost'
+    const API_BASE = isLocalPreview ? '/api' : `http://${serverHost}:3001/api`
     fetch(`${API_BASE}/auth/users`)
       .then(res => res.json())
       .then(data => {
         if (data.users && data.users.length > 0) {
           setUsers(data.users)
+          setLoadFailed(false)
         } else {
           setLoadFailed(true)
         }
       })
       .catch(() => setLoadFailed(true))
-  }, [])
+  }
+
+  useEffect(() => { loadUsers() }, [])
+
+  // 保存服务器地址并重新加载
+  const handleSaveServer = () => {
+    const host = serverInput.trim() || 'localhost'
+    localStorage.setItem('sdd_server_host', host)
+    setShowServerConfig(false)
+    setLoadFailed(false)
+    loadUsers()
+  }
 
   async function handleLogin() {
     if (!selectedUser) { setError('请选择身份'); return }
@@ -68,7 +83,40 @@ export default function LoginPage() {
               <option key={u.id} value={u.id}>{u.name} ({roleLabel[u.systemRole] || u.systemRole})</option>
             ))}
           </select>
-          {loadFailed && <div style={{ fontSize: '.65rem', color: 'var(--danger)', marginTop: 4 }}>无法连接服务器，请检查后端是否启动</div>}
+          {loadFailed && (
+            <div style={{ fontSize: '.65rem', color: 'var(--danger)', marginTop: 4 }}>
+              无法连接服务器，请检查后端是否启动
+              <span
+                style={{ color: 'var(--accent)', cursor: 'pointer', marginLeft: 6, textDecoration: 'underline' }}
+                onClick={() => setShowServerConfig(!showServerConfig)}
+              >
+                配置服务器地址
+              </span>
+            </div>
+          )}
+          {showServerConfig && (
+            <div style={{ marginTop: 8, padding: 10, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <label style={{ fontSize: '.6rem', color: 'var(--muted)', display: 'block', marginBottom: 4 }}>
+                后端服务器地址（IP 或 localhost）
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  type="text"
+                  value={serverInput}
+                  onChange={e => setServerInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveServer()}
+                  placeholder="如 192.168.1.100 或 localhost"
+                  style={{ flex: 1, padding: '6px 10px', fontSize: '.75rem', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', outline: 'none' }}
+                />
+                <button className="btn btn-primary btn-xs" onClick={handleSaveServer} style={{ padding: '6px 12px' }}>
+                  保存
+                </button>
+              </div>
+              <div style={{ fontSize: '.58rem', color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+                本机运行后端填 localhost；连接其他设备后端填其 IP（如 192.168.1.100）
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="fld">

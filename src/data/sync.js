@@ -2,13 +2,14 @@
  * WebSocket 实时同步层
  *
  * 本地 preview：ws://localhost:5173/ws（通过 vite proxy 转发）
- * GitHub Pages / 本地 dev：ws://localhost:3001/ws（直连本地后端）
+ * GitHub Pages / 本地 dev：ws://<serverHost>:3001/ws（直连本地或局域网后端）
  */
 
 const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
+const serverHost = localStorage.getItem('sdd_server_host') || 'localhost'
 const WS_URL = isLocalPreview
   ? `ws://${window.location.host}/ws`
-  : 'ws://localhost:3001/ws'
+  : `ws://${serverHost}:3001/ws`
 
 class SyncClient {
   constructor() {

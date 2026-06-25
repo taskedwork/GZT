@@ -96,6 +96,19 @@ app.use(cors({
   },
   credentials: true
 }));
+
+// Private Network Access：允许 HTTPS 页面（GitHub Pages）请求 HTTP localhost 后端
+// Chrome 94+ 要求 preflight 响应包含此头，否则阻止请求
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(204).end();
+  }
+  next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 
 // 请求日志（生产环境可关闭）
