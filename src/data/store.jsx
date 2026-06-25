@@ -525,31 +525,33 @@ export function AppProvider({ children }) {
     let cancelled = false
     checkBackendAvailable().then(async (available) => {
       if (cancelled) return
-      const mode = available ? 'backend' : 'frontend'
-      frontendModeRef.current = mode === 'frontend'
-      if (mode === 'frontend') {
-        // 纯前端模式：先初始化默认用户并加载，再切换模式（避免登录页显示空列表）
-        try {
-          await initDefaultUsers()
-          const res = await feGetUsers()
-          if (!cancelled) {
-            dispatch({ type: 'LOAD_USERS', payload: res.users })
-            setAppMode('frontend')
-          }
-        } catch (err) {
-          console.error('前端模式初始化失败:', err)
-          // 即使失败也切换到前端模式，让用户看到错误提示
-          if (!cancelled) setAppMode('frontend')
-        }
-      } else {
-        // 后端模式：从后端加载用户
-        setAppMode('backend')
+      if (available) {
+        // 后端模式：先尝试加载用户列表，失败则回退到前端模式
         try {
           const res = await authAPI.getUsers()
-          if (res.users) dispatch({ type: 'LOAD_USERS', payload: res.users })
+          if (!cancelled && res.users && res.users.length > 0) {
+            frontendModeRef.current = false
+            dispatch({ type: 'LOAD_USERS', payload: res.users })
+            setAppMode('backend')
+            return
+          }
+          throw new Error('用户列表为空')
         } catch (err) {
-          console.error('加载用户列表失败:', err)
+          console.warn('后端模式不可用，回退到前端模式:', err.message)
         }
+      }
+      // 前端模式（后端不可用或加载失败）
+      frontendModeRef.current = true
+      try {
+        await initDefaultUsers()
+        const res = await feGetUsers()
+        if (!cancelled) {
+          dispatch({ type: 'LOAD_USERS', payload: res.users })
+          setAppMode('frontend')
+        }
+      } catch (err) {
+        console.error('前端模式初始化失败:', err)
+        if (!cancelled) setAppMode('frontend')
       }
     })
     return () => { cancelled = true }

@@ -44,11 +44,30 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>
 )
 
-// 注册 Service Worker（PWA 离线支持）
+// 注册 Service Worker（PWA 离线支持 + 自动更新）
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => {
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      // 检测到新 Service Worker 时自动激活
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ type: 'SKIP_WAITING' })
+            }
+          })
+        }
+      })
+    }).catch((err) => {
       console.log('SW 注册失败:', err)
+    })
+
+    // 新 Service Worker 激活后自动刷新页面
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'SW_UPDATED') {
+        window.location.reload()
+      }
     })
   })
 }

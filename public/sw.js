@@ -6,7 +6,7 @@
  * - API/WebSocket: 不缓存，直连后端
  */
 
-const CACHE_NAME = 'sdd-pwa-v1'
+const CACHE_NAME = 'sdd-pwa-v2'
 const ASSETS = [
   './',
   './index.html',
@@ -24,14 +24,23 @@ self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
 
-// 激活：清理旧缓存
+// 接收客户端消息
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
+})
+
+// 激活：清理旧缓存并通知客户端刷新
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim()).then(() => {
+      // 通知所有客户端有新版本
+      return self.clients.matchAll().then((clients) => {
+        clients.forEach((c) => c.postMessage({ type: 'SW_UPDATED' }))
+      })
+    })
   )
-  self.clients.claim()
 })
 
 // 请求拦截
