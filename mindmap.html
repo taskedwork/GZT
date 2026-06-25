@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>思维导图</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #1a1a2e;
+      overflow: hidden;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #toolbar {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      background: rgba(30, 30, 50, 0.9);
+      backdrop-filter: blur(12px);
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 100;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    #toolbar button {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e0e0e0;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    #toolbar button:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.24);
+    }
+
+    #toolbar button:active {
+      transform: scale(0.96);
+    }
+
+    #toolbar .divider {
+      width: 1px;
+      background: rgba(255, 255, 255, 0.15);
+      margin: 0 4px;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 13px;
+      z-index: 100;
+      pointer-events: none;
+      text-align: center;
+    }
+
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    #canvas:active {
+      cursor: grabbing;
+    }
+
+    #svg-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 1;
+      overflow: visible;
+    }
+
+    .node {
+      position: absolute;
+      z-index: 2;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+      transition: box-shadow 0.15s;
+    }
+
+    .node-content {
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 15px;
+      white-space: nowrap;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .node.root .node-content {
+      font-size: 18px;
+      font-weight: 700;
+      padding: 14px 28px;
+      border-radius: 14px;
+    }
+
+    .node.selected .node-content {
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.7), 0 3px 12px rgba(102, 126, 234, 0.5);
+    }
+
+    .node.dragging .node-content {
+      opacity: 0.8;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .node:hover .node-content {
+      transform: translateY(-1px);
+    }
+
+    .node.hover-target .node-content {
+      box-shadow: 0 0 0 4px #43e97b, 0 6px 20px rgba(67, 233, 123, 0.5);
+      transform: scale(1.08);
+    }
+
+    .collapse-dot {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: bold;
+      z-index: 3;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .collapse-dot:hover {
+      color: white;
+    }
+
+    .add-child-btn {
+      position: absolute;
+      right: -24px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 4;
+      transition: all 0.2s;
+      line-height: 1;
+    }
+
+    .node.selected .add-child-btn {
+      display: flex;
+    }
+
+    .add-child-btn:hover {
+      color: white;
+      transform: translateY(-50%) scale(1.15);
+    }
+
+    .node-input {
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 15px;
+      outline: none;
+      min-width: 60px;
+      text-align: center;
+      font-family: inherit;
+    }
+
+    .node.root .node-input {
+      font-size: 18px;
+      font-weight: 700;
+      padding: 14px 28px;
+    }
+
+    /* ==================== 侧边面板 ==================== */
+    #panel-toggle {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      z-index: 200;
+      background: rgba(30, 30, 50, 0.9);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #e0e0e0;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+
+    #panel-toggle:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    #side-panel {
+      position: fixed;
+      right: -320px;
+      top: 0;
+      width: 300px;
+      height: 100vh;
+      background: rgba(20, 20, 40, 0.95);
+      backdrop-filter: blur(16px);
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+      z-index: 150;
+      transition: right 0.3s ease;
+      overflow-y: auto;
+      padding: 70px 16px 24px;
+    }
+
+    #side-panel.open {
+      right: 0;
+    }
+
+    #side-panel::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #side-panel::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+    }
+
+    .panel-section {
+      margin-bottom: 24px;
+    }
+
+    .panel-title {
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    /* 风格卡片 */
+    .theme-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .theme-card {
+      border: 2px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .theme-card:hover {
+      border-color: rgba(255,255,255,0.25);
+      transform: translateY(-1px);
+    }
+
+    .theme-card.active {
+      border-color: rgba(255,255,255,0.6);
+      box-shadow: 0 0 12px rgba(255,255,255,0.15);
+    }
+
+    .theme-preview {
+      height: 40px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+
+    .theme-name {
+      color: rgba(255,255,255,0.7);
+      font-size: 12px;
+    }
+
+    /* 模板卡片 */
+    .template-card {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 8px;
+    }
+
+    .template-card:hover {
+      border-color: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .template-card-title {
+      color: rgba(255,255,255,0.85);
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .template-card-desc {
+      color: rgba(255,255,255,0.4);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .template-card-tags {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .template-tag {
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.45);
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button onclick="addChild()" title="添加子节点">＋ 子节点</button>
+    <button onclick="addSibling()" title="添加兄弟节点">→ 兄弟节点</button>
+    <div class="divider"></div>
+    <button onclick="deleteNode()" title="删除节点">🗑 删除</button>
+    <div class="divider"></div>
+    <button onclick="undo()" title="撤销">↩ 撤销</button>
+    <div class="divider"></div>
+    <button onclick="resetView()" title="重置视图">⊙ 居中</button>
+    <button onclick="zoomIn()" title="放大">🔍＋</button>
+    <button onclick="zoomOut()" title="缩小">🔍－</button>
+  </div>
+
+  <div id="hint">
+    Tab 添加子节点 | Enter 添加兄弟节点 | Delete 删除 | 双击编辑 | 拖拽到节点上自动成为子节点 | 滚轮缩放 | Ctrl+Z 撤销
+  </div>
+
+  <button id="panel-toggle" onclick="togglePanel()">☰</button>
+
+  <div id="side-panel">
+    <div class="panel-section">
+      <div class="panel-title">风格主题</div>
+      <div class="theme-grid" id="theme-grid"></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-title">结构模板</div>
+      <div id="template-list"></div>
+    </div>
+  </div>
+
+  <div id="canvas">
+    <svg id="svg-layer"></svg>
+  </div>
+
+  <script>
+    // ==================== 风格主题 ====================
+    const THEMES = {
+      neon: {
+        name: '霓虹',
+        bg: '#1a1a2e',
+        root: ['#f093fb', '#f5576c'],
+        branches: [
+          ['#667eea', '#764ba2'],
+          ['#f093fb', '#f5576c'],
+          ['#4facfe', '#00f2fe'],
+          ['#43e97b', '#38f9d7'],
+          ['#fa709a', '#fee140'],
+          ['#feca57', '#ff9a9e'],
+          ['#ff6b6b', '#ee5a24'],
+          ['#a29bfe', '#6c5ce7'],
+        ],
+        preview: 'linear-gradient(135deg, #667eea, #f093fb, #43e97b, #fa709a)',
+      },
+      ocean: {
+        name: '海洋',
+        bg: '#0a1628',
+        root: ['#00d2ff', '#3a7bd5'],
+        branches: [
+          ['#00d2ff', '#3a7bd5'],
+          ['#43e97b', '#38f9d7'],
+          ['#00b4db', '#0083b0'],
+          ['#11998e', '#38ef7d'],
+          ['#2193b0', '#6dd5ed'],
+          ['#48c6ef', '#6f86d6'],
+          ['#0cebeb', '#20e3b2'],
+          ['#29ffc6', '#20e3b2'],
+        ],
+        preview: 'linear-gradient(135deg, #00d2ff, #43e97b, #0cebeb, #2193b0)',
+      },
+      sunset: {
+        name: '日落',
+        bg: '#1a0a1e',
+        root: ['#fc5c7d', '#6a82fb'],
+        branches: [
+          ['#fc5c7d', '#6a82fb'],
+          ['#f12711', '#f5af19'],
+          ['#ee9ca7', '#ffdde1'],
+          ['#ff6a00', '#ee0979'],
+          ['#fc4a1a', '#f7b733'],
+          ['#e44d26', '#f16529'],
+          ['#ff512f', '#f09819'],
+          ['#c31432', '#240b36'],
+        ],
+        preview: 'linear-gradient(135deg, #fc5c7d, #f12711, #ff6a00, #f7b733)',
+      },
+      forest: {
+        name: '森林',
+        bg: '#0d1b0e',
+        root: ['#56ab2f', '#a8e063'],
+        branches: [
+          ['#56ab2f', '#a8e063'],
+          ['#11998e', '#38ef7d'],
+          ['#0f9b0f', '#000000'],
+          ['#3ca55c', '#b5e48c'],
+          ['#2d5016', '#8cc63f'],
+          ['#4b6cb7', '#182848'],
+          ['#134e5e', '#71b280'],
+          ['#0f2027', '#2c5364'],
+        ],
+        preview: 'linear-gradient(135deg, #56ab2f, #11998e, #3ca55c, #71b280)',
+      },
+      minimal: {
+        name: '极简',
+        bg: '#f5f5f5',
+        root: ['#2c3e50', '#3498db'],
+        branches: [
+          ['#2c3e50', '#4a6741'],
+          ['#3498db', '#2980b9'],
+          ['#7f8c8d', '#95a5a6'],
+          ['#16a085', '#1abc9c'],
+          ['#8e44ad', '#9b59b6'],
+          ['#d35400', '#e67e22'],
+          ['#c0392b', '#e74c3c'],
+          ['#2c3e50', '#34495e'],
+        ],
+        preview: 'linear-gradient(135deg, #2c3e50, #3498db, #95a5a6, #1abc9c)',
+        light: true,
+      },
+      candy: {
+        name: '糖果',
+        bg: '#1e0a2e',
+        root: ['#ff6fd8', '#3813c2'],
+        branches: [
+          ['#ff6fd8', '#3813c2'],
+          ['#ff9a9e', '#fecfef'],
+          ['#a18cd1', '#fbc2eb'],
+          ['#fbc2eb', '#a6c1ee'],
+          ['#ffecd2', '#fcb69f'],
+          ['#ff9a9e', '#fad0c4'],
+          ['#e2b0ff', '#9f44d3'],
+          ['#c471f5', '#fa71cd'],
+        ],
+        preview: 'linear-gradient(135deg, #ff6fd8, #ff9a9e, #a18cd1, #fbc2eb)',
+      },
+    };
+
+    let currentTheme = 'neon';
+
+    function getTheme() {
+      return THEMES[currentTheme];
+    }
+
+    function applyTheme(themeId) {
+      currentTheme = themeId;
+      const theme = getTheme();
+      document.body.style.background = theme.bg;
+
+      // 极简主题调整文字颜色
+      const isLight = theme.light;
+      document.querySelectorAll('.node-content').forEach(el => {
+        el.style.color = isLight ? '#2c3e50' : '#fff';
+      });
+      document.querySelectorAll('.node-input').forEach(el => {
+        el.style.color = isLight ? '#2c3e50' : '#fff';
+      });
+
+      // 更新主题卡片选中状态
+      document.querySelectorAll('.theme-card').forEach(card => {
+        card.classList.toggle('active', card.dataset.theme === themeId);
+      });
+
+      renderAll();
+      saveToStorage();
+    }
+
+    // ==================== 结构模板 ====================
+    const TEMPLATES = [
+      {
+        name: 'SWOT 分析',
+        desc: '优势、劣势、机会、威胁四维分析',
+        tags: ['战略', '分析'],
+        build: () => {
+          const root = createNodeData('SWOT 分析');
+          root.children = [
+            { ...createNodeData('优势 S'), children: [{ ...createNodeData('核心竞争力') }, { ...createNodeData('资源优势') }] },
+            { ...createNodeData('劣势 W'), children: [{ ...createNodeData('短板') }, { ...createNodeData('待改进') }] },
+            { ...createNodeData('机会 O'), children: [{ ...createNodeData('市场趋势') }, { ...createNodeData('新技术') }] },
+            { ...createNodeData('威胁 T'), children: [{ ...createNodeData('竞争对手') }, { ...createNodeData('风险因素') }] },
+          ];
+          return root;
+        }
+      },
+      {
+        name: '项目计划',
+        desc: '目标、阶段、资源、风险四层规划',
+        tags: ['项目', '规划'],
+        build: () => {
+          const root = createNodeData('项目计划');
+          root.children = [
+            { ...createNodeData('目标'), children: [{ ...createNodeData('短期目标') }, { ...createNodeData('长期目标') }] },
+            { ...createNodeData('阶段'), children: [{ ...createNodeData('需求分析') }, { ...createNodeData('设计开发') }, { ...createNodeData('测试上线') }] },
+            { ...createNodeData('资源'), children: [{ ...createNodeData('人力') }, { ...createNodeData('预算') }, { ...createNodeData('工具') }] },
+            { ...createNodeData('风险'), children: [{ ...createNodeData('进度风险') }, { ...createNodeData('质量风险') }] },
+          ];
+          return root;
+        }
+      },
+      {
+        name: '读书笔记',
+        desc: '书籍核心观点与个人思考',
+        tags: ['学习', '笔记'],
+        build: () => {
+          const root = createNodeData('读书笔记');
+          root.children = [
+            { ...createNodeData('书名/作者') },
+            { ...createNodeData('核心观点'), children: [{ ...createNodeData('观点1') }, { ...createNodeData('观点2') }, { ...createNodeData('观点3') }] },
+            { ...createNodeData('精彩摘录') },
+            { ...createNodeData('个人思考'), children: [{ ...createNodeData('启发') }, { ...createNodeData('质疑') }, { ...createNodeData('应用') }] },
+            { ...createNodeData('行动清单') },
+          ];
+          return root;
+        }
+      },
+      {
+        name: '会议纪要',
+        desc: '议题、决议、待办结构化记录',
+        tags: ['工作', '记录'],
+        build: () => {
+          const root = createNodeData('会议纪要');
+          root.children = [
+            { ...createNodeData('会议主题') },
+            { ...createNodeData('参会人员') },
+            { ...createNodeData('议题1'), children: [{ ...createNodeData('讨论要点') }, { ...createNodeData('决议') }] },
+            { ...createNodeData('议题2'), children: [{ ...createNodeData('讨论要点') }, { ...createNodeData('决议') }] },
+            { ...createNodeData('待办事项'), children: [{ ...createNodeData('负责人/截止日期') }] },
+          ];
+          return root;
+        }
+      },
+      {
+        name: '产品分析',
+        desc: '用户、需求、功能、竞品全景分析',
+        tags: ['产品', '分析'],
+        build: () => {
+          const root = createNodeData('产品分析');
+          root.children = [
+            { ...createNodeData('目标用户'), children: [{ ...createNodeData('用户画像') }, { ...createNodeData('使用场景') }] },
+            { ...createNodeData('核心需求'), children: [{ ...createNodeData('痛点') }, { ...createNodeData('期望') }] },
+            { ...createNodeData('功能规划'), children: [{ ...createNodeData('P0 必须') }, { ...createNodeData('P1 重要') }, { ...createNodeData('P2 期望') }] },
+            { ...createNodeData('竞品分析'), children: [{ ...createNodeData('竞品A') }, { ...createNodeData('竞品B') }] },
+            { ...createNodeData('数据指标') },
+          ];
+          return root;
+        }
+      },
+      {
+        name: '周计划',
+        desc: '周一到周日任务安排',
+        tags: ['计划', '日常'],
+        build: () => {
+          const root = createNodeData('周计划');
+          const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+          root.children = days.map(d => createNodeData(d));
+          return root;
+        }
+      },
+      {
+        name: '思维发散',
+        desc: '从中心主题自由发散思考',
+        tags: ['创意', '发散'],
+        build: () => {
+          const root = createNodeData('中心主题');
+          root.children = [
+            { ...createNodeData('方向A'), children: [{ ...createNodeData('想法A1') }, { ...createNodeData('想法A2') }] },
+            { ...createNodeData('方向B'), children: [{ ...createNodeData('想法B1') }, { ...createNodeData('想法B2') }] },
+            { ...createNodeData('方向C'), children: [{ ...createNodeData('想法C1') }, { ...createNodeData('想法C2') }] },
+            { ...createNodeData('方向D'), children: [{ ...createNodeData('想法D1') }, { ...createNodeData('想法D2') }] },
+            { ...createNodeData('方向E'), children: [{ ...createNodeData('想法E1') }] },
+          ];
+          return root;
+        }
+      },
+      {
+        name: '空白',
+        desc: '从零开始构建你的思维导图',
+        tags: ['自由'],
+        build: () => createNodeData('中心主题')
+      },
+    ];
+
+    function applyTemplate(idx) {
+      if (!confirm('应用模板将替换当前内容，是否继续？')) return;
+      idCounter = 0;
+      treeRoot = TEMPLATES[idx].build();
+      // 重新分配 id
+      function reId(node) {
+        node.id = newId();
+        node.children.forEach(c => { c.parentId = node.id; reId(c); });
+      }
+      reId(treeRoot);
+      selectedId = treeRoot.id;
+      undoStack = [];
+      pushUndo();
+      renderAll();
+    }
+
+    // ==================== 面板 ====================
+    function togglePanel() {
+      document.getElementById('side-panel').classList.toggle('open');
+    }
+
+    function buildPanel() {
+      // 风格主题
+      const grid = document.getElementById('theme-grid');
+      grid.innerHTML = '';
+      for (const [id, theme] of Object.entries(THEMES)) {
+        const card = document.createElement('div');
+        card.className = 'theme-card' + (id === currentTheme ? ' active' : '');
+        card.dataset.theme = id;
+        card.innerHTML = `
+          <div class="theme-preview" style="background:${theme.preview}"></div>
+          <div class="theme-name">${theme.name}</div>
+        `;
+        card.addEventListener('click', () => applyTheme(id));
+        grid.appendChild(card);
+      }
+
+      // 结构模板
+      const list = document.getElementById('template-list');
+      list.innerHTML = '';
+      TEMPLATES.forEach((t, i) => {
+        const card = document.createElement('div');
+        card.className = 'template-card';
+        card.innerHTML = `
+          <div class="template-card-title">${t.name}</div>
+          <div class="template-card-desc">${t.desc}</div>
+          <div class="template-card-tags">${t.tags.map(tag => `<span class="template-tag">${tag}</span>`).join('')}</div>
+        `;
+        card.addEventListener('click', () => applyTemplate(i));
+        list.appendChild(card);
+      });
+    }
+
+    // ==================== 数据模型 ====================
+    let idCounter = 0;
+    function newId() { return 'n' + (++idCounter); }
+
+    function createNodeData(text, parentId = null) {
+      return {
+        id: newId(),
+        text,
+        parentId,
+        children: [],
+        collapsed: false,
+        x: 0,
+        y: 0,
+      };
+    }
+
+    function findNode(id, root = treeRoot) {
+      if (root.id === id) return root;
+      for (const child of root.children) {
+        const found = findNode(id, child);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function findParent(id, root = treeRoot, parent = null) {
+      if (root.id === id) return parent;
+      for (const child of root.children) {
+        const found = findParent(id, child, root);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    }
+
+    function removeFromTree(id, root = treeRoot) {
+      if (root.id === id) return null;
+      root.children = root.children.filter(c => c.id !== id);
+      for (const child of root.children) {
+        removeFromTree(id, child);
+      }
+      return root;
+    }
+
+    let treeRoot = createNodeData('中心主题');
+    let selectedId = treeRoot.id;
+    let domMap = new Map();
+    let editMode = false;
+
+    function collectNodes(root) {
+      const result = [root];
+      if (!root.collapsed) {
+        for (const child of root.children) {
+          result.push(...collectNodes(child));
+        }
+      }
+      return result;
+    }
+
+    // ==================== 撤销 ====================
+    let undoStack = [];
+    const MAX_UNDO = 50;
+
+    function pushUndo() {
+      undoStack.push(JSON.stringify({ root: treeRoot, theme: currentTheme }));
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+    }
+
+    function undo() {
+      if (undoStack.length <= 1) return;
+      const prev = undoStack[undoStack.length - 1];
+      const data = JSON.parse(prev);
+      treeRoot = data.root;
+      if (data.theme && data.theme !== currentTheme) applyTheme(data.theme);
+      undoStack.pop();
+      selectedId = treeRoot.id;
+      renderAll();
+    }
+
+    // ==================== 布局计算 ====================
+    const NODE_GAP_X = 160;
+    const NODE_GAP_Y = 55;
+
+    function countLeaves(node) {
+      if (node.children.length === 0 || node.collapsed) return 1;
+      return node.children.reduce((sum, c) => sum + countLeaves(c), 0);
+    }
+
+    function shiftSubtree(node, dx, dy) {
+      node.x += dx;
+      node.y += dy;
+      for (const child of node.children) {
+        shiftSubtree(child, dx, dy);
+      }
+    }
+
+    function calcLayout(node, x) {
+      node.x = x;
+      if (node.children.length === 0 || node.collapsed) {
+        node.y = 0;
+        return 1;
+      }
+
+      let totalLeaves = 0;
+      const childX = x + NODE_GAP_X;
+
+      for (const child of node.children) {
+        totalLeaves += calcLayout(child, childX);
+      }
+
+      let cy = -(totalLeaves - 1) * NODE_GAP_Y / 2;
+      for (const child of node.children) {
+        const subtreeSize = countLeaves(child);
+        const newY = cy + (subtreeSize - 1) * NODE_GAP_Y / 2;
+        shiftSubtree(child, 0, newY - child.y);
+        cy += subtreeSize * NODE_GAP_Y;
+      }
+
+      const firstY = node.children[0].y;
+      const lastY = node.children[node.children.length - 1].y;
+      node.y = (firstY + lastY) / 2;
+
+      return totalLeaves;
+    }
+
+    function alignSiblings(parent) {
+      const siblings = parent.children;
+      if (siblings.length < 2) return;
+
+      const targetX = parent.x + NODE_GAP_X;
+      const ordered = siblings.slice().sort((a, b) => a.y - b.y);
+
+      const totalLeaves = ordered.reduce((sum, c) => sum + countLeaves(c), 0);
+      let cy = -(totalLeaves - 1) * NODE_GAP_Y / 2;
+      for (const child of ordered) {
+        const size = countLeaves(child);
+        const newY = cy + (size - 1) * NODE_GAP_Y / 2;
+        shiftSubtree(child, targetX - child.x, newY - child.y);
+        cy += size * NODE_GAP_Y;
+      }
+
+      parent.y = (ordered[0].y + ordered[ordered.length - 1].y) / 2;
+
+      for (const child of ordered) {
+        collectNodes(child).forEach(desc => {
+          const descEl = domMap.get(desc.id);
+          if (descEl) updateNodePosition(descEl, desc);
+        });
+      }
+      const parentEl = domMap.get(parent.id);
+      if (parentEl) updateNodePosition(parentEl, parent);
+    }
+
+    // ==================== 渲染 ====================
+    let scale = 1;
+    let panX = 0, panY = 0;
+
+    function renderAll() {
+      const canvas = document.getElementById('canvas');
+      domMap.forEach(el => el.remove());
+      domMap.clear();
+
+      calcLayout(treeRoot, 0);
+      buildDOM(treeRoot, null, 0);
+      drawLines(treeRoot);
+    }
+
+    function buildDOM(node, parentEl, siblingIndex) {
+      const canvas = document.getElementById('canvas');
+      const theme = getTheme();
+      const isLight = theme.light;
+      const el = document.createElement('div');
+      el.className = 'node' + (node.id === treeRoot.id ? ' root' : '');
+      el.dataset.id = node.id;
+      el.style.left = '50%';
+      el.style.top = '50%';
+
+      const content = document.createElement('div');
+      content.className = 'node-content';
+      content.textContent = node.text;
+
+      if (node.id === treeRoot.id) {
+        const [c1, c2] = theme.root;
+        content.style.background = `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`;
+        content.style.boxShadow = `0 4px 20px ${c1}66`;
+        if (isLight) content.style.color = '#fff';
+      } else {
+        const [c1, c2] = theme.branches[siblingIndex % theme.branches.length];
+        content.style.background = `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`;
+        content.style.boxShadow = `0 3px 12px ${c1}55`;
+        if (isLight) content.style.color = '#fff';
+      }
+
+      el.appendChild(content);
+
+      if (node.children.length > 0) {
+        const dot = document.createElement('div');
+        dot.className = 'collapse-dot';
+        dot.textContent = node.collapsed ? '+' : '−';
+        dot.style.right = '-42px';
+        dot.style.top = '50%';
+        dot.style.transform = 'translateY(-50%)';
+        const branchColor = theme.branches[siblingIndex % theme.branches.length][0];
+        dot.style.borderColor = branchColor;
+        dot.style.color = branchColor;
+        dot.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          pushUndo();
+          node.collapsed = !node.collapsed;
+          renderAll();
+        });
+        dot.addEventListener('mouseenter', () => {
+          dot.style.background = branchColor;
+          dot.style.color = 'white';
+        });
+        dot.addEventListener('mouseleave', () => {
+          dot.style.background = 'rgba(255,255,255,0.9)';
+          dot.style.color = branchColor;
+        });
+        el.appendChild(dot);
+      }
+
+      const addBtn = document.createElement('div');
+      addBtn.className = 'add-child-btn';
+      addBtn.textContent = '+';
+      addBtn.style.borderColor = '#43e97b';
+      addBtn.style.color = '#43e97b';
+      addBtn.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        selectNode(node.id);
+        addChild();
+      });
+      addBtn.addEventListener('mouseenter', () => {
+        addBtn.style.background = '#43e97b';
+        addBtn.style.color = 'white';
+      });
+      addBtn.addEventListener('mouseleave', () => {
+        addBtn.style.background = 'rgba(255,255,255,0.9)';
+        addBtn.style.color = '#43e97b';
+      });
+      el.appendChild(addBtn);
+
+      el.addEventListener('mousedown', (e) => onNodeMouseDown(e, node));
+      el.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startEdit(node, el);
+      });
+
+      canvas.appendChild(el);
+      domMap.set(node.id, el);
+
+      updateNodePosition(el, node);
+
+      if (!node.collapsed) {
+        for (let i = 0; i < node.children.length; i++) {
+          buildDOM(node.children[i], el, i);
+        }
+      }
+
+      if (node.id === selectedId) {
+        el.classList.add('selected');
+      }
+    }
+
+    function updateNodePosition(el, node) {
+      const tx = node.x * scale + panX;
+      const ty = node.y * scale + panY;
+      el.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) scale(${scale})`;
+    }
+
+    function updateAllPositions() {
+      domMap.forEach((el, id) => {
+        const node = findNode(id);
+        if (node) updateNodePosition(el, node);
+      });
+      drawLines(treeRoot);
+    }
+
+    // ==================== SVG 连线 ====================
+    function drawLines(node) {
+      const svg = document.getElementById('svg-layer');
+      const canvas = document.getElementById('canvas');
+      const cx = canvas.clientWidth / 2;
+      const cy = canvas.clientHeight / 2;
+      const theme = getTheme();
+
+      svg.setAttribute('width', canvas.clientWidth);
+      svg.setAttribute('height', canvas.clientHeight);
+      svg.innerHTML = '';
+
+      function draw(node, siblingIndex = 0) {
+        if (node.collapsed) return;
+        const color = theme.branches[siblingIndex % theme.branches.length][0];
+        for (let i = 0; i < node.children.length; i++) {
+          const child = node.children[i];
+          const x1 = cx + node.x * scale + panX;
+          const y1 = cy + node.y * scale + panY;
+          const x2 = cx + child.x * scale + panX;
+          const y2 = cy + child.y * scale + panY;
+
+          const cpOffset = 60 * scale;
+          const cx1 = x1 + cpOffset;
+          const cx2 = x2 - cpOffset;
+
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', color);
+          path.setAttribute('stroke-width', 2.5);
+          path.setAttribute('stroke-linecap', 'round');
+          path.setAttribute('opacity', '0.6');
+          svg.appendChild(path);
+
+          draw(child, i);
+        }
+      }
+
+      draw(node, 0);
+    }
+
+    // ==================== 交互（拖拽 + 自动对齐）====================
+    let dragState = null;
+
+    function onNodeMouseDown(e, node) {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+
+      selectNode(node.id);
+
+      if (node.id === treeRoot.id) return;
+
+      const el = domMap.get(node.id);
+      el.classList.add('dragging');
+
+      dragState = {
+        node,
+        el,
+        lastX: e.clientX,
+        lastY: e.clientY,
+      };
+    }
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragState) return;
+      const { node, el, lastX, lastY } = dragState;
+      const dx = (e.clientX - lastX) / scale;
+      const dy = (e.clientY - lastY) / scale;
+
+      shiftSubtree(node, dx, dy);
+      dragState.lastX = e.clientX;
+      dragState.lastY = e.clientY;
+
+      collectNodes(node).forEach(desc => {
+        const descEl = domMap.get(desc.id);
+        if (descEl) updateNodePosition(descEl, desc);
+      });
+
+      const SNAP = 45;
+      let target = null;
+      let minDist = Infinity;
+      collectNodes(treeRoot).forEach(other => {
+        if (other === node || other.collapsed) return;
+        let ancestor = findParent(other.id);
+        let isDescendant = false;
+        while (ancestor) {
+          if (ancestor === node) { isDescendant = true; break; }
+          ancestor = findParent(ancestor.id);
+        }
+        if (isDescendant) return;
+
+        const dist = Math.hypot(other.x - node.x, other.y - node.y);
+        if (dist < SNAP && dist < minDist) {
+          minDist = dist;
+          target = other;
+        }
+      });
+
+      if (dragState.targetEl) {
+        dragState.targetEl.classList.remove('hover-target');
+      }
+      if (target) {
+        const targetEl = domMap.get(target.id);
+        if (targetEl) targetEl.classList.add('hover-target');
+        dragState.target = target;
+        dragState.targetEl = targetEl;
+      } else {
+        dragState.target = null;
+        dragState.targetEl = null;
+      }
+
+      drawLines(treeRoot);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragState) return;
+      const { node, el, target } = dragState;
+
+      if (dragState.targetEl) {
+        dragState.targetEl.classList.remove('hover-target');
+      }
+      dragState = null;
+      el.classList.remove('dragging');
+
+      if (target) {
+        pushUndo();
+        const oldParent = findParent(node.id);
+        if (oldParent) {
+          oldParent.children = oldParent.children.filter(c => c.id !== node.id);
+        }
+        target.children.push(node);
+        node.parentId = target.id;
+        renderAll();
+      } else {
+        pushUndo();
+        let p = findParent(node.id);
+        while (p) {
+          if (p.children.length >= 2) alignSiblings(p);
+          p = findParent(p.id);
+        }
+        drawLines(treeRoot);
+      }
+    });
+
+    function selectNode(id) {
+      const oldEl = domMap.get(selectedId);
+      if (oldEl) oldEl.classList.remove('selected');
+      selectedId = id;
+      const newEl = domMap.get(id);
+      if (newEl) newEl.classList.add('selected');
+    }
+
+    function startEdit(node, el) {
+      if (editMode) return;
+      editMode = true;
+      pushUndo();
+
+      const content = el.querySelector('.node-content');
+      const input = document.createElement('input');
+      input.className = 'node-input';
+      const isLight = getTheme().light;
+      if (isLight) input.style.color = '#2c3e50';
+      input.value = node.text;
+      input.style.width = Math.max(content.offsetWidth, 60) + 'px';
+
+      content.replaceWith(input);
+      input.focus();
+      input.select();
+
+      function finish() {
+        const newText = input.value.trim() || node.text;
+        node.text = newText;
+        editMode = false;
+        renderAll();
+      }
+
+      input.addEventListener('blur', finish);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); finish(); }
+        if (e.key === 'Escape') { input.value = node.text; finish(); }
+      });
+    }
+
+    function addChild() {
+      const parent = findNode(selectedId);
+      if (!parent) return;
+      pushUndo();
+      const child = createNodeData('新节点', parent.id);
+      parent.children.push(child);
+      selectedId = child.id;
+      renderAll();
+    }
+
+    function addSibling() {
+      if (selectedId === treeRoot.id) return;
+      const parent = findParent(selectedId);
+      if (!parent) return;
+      pushUndo();
+      const sibling = createNodeData('新节点', parent.id);
+      const idx = parent.children.findIndex(c => c.id === selectedId);
+      parent.children.splice(idx + 1, 0, sibling);
+      selectedId = sibling.id;
+      renderAll();
+    }
+
+    function deleteNode() {
+      if (selectedId === treeRoot.id) return;
+      pushUndo();
+      removeFromTree(selectedId);
+      selectedId = treeRoot.id;
+      renderAll();
+    }
+
+    // ==================== 画布操作 ====================
+    let isPanning = false;
+    let panStartX = 0, panStartY = 0;
+
+    document.getElementById('canvas').addEventListener('mousedown', (e) => {
+      if (e.target !== e.currentTarget && e.target.closest('.node')) return;
+      isPanning = true;
+      panStartX = e.clientX - panX;
+      panStartY = e.clientY - panY;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      panX = e.clientX - panStartX;
+      panY = e.clientY - panStartY;
+      updateAllPositions();
+    });
+
+    document.addEventListener('mouseup', () => {
+      isPanning = false;
+    });
+
+    document.getElementById('canvas').addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.92 : 1.08;
+      const newScale = scale * delta;
+      if (newScale < 0.2 || newScale > 3) return;
+
+      const rect = document.getElementById('canvas').getBoundingClientRect();
+      const mx = e.clientX - rect.left - rect.width / 2;
+      const my = e.clientY - rect.top - rect.height / 2;
+
+      panX = mx - (mx - panX) * delta;
+      panY = my - (my - panY) * delta;
+      scale = newScale;
+
+      requestAnimationFrame(() => {
+        domMap.forEach((el, id) => {
+          const node = findNode(id);
+          if (node) updateNodePosition(el, node);
+        });
+        drawLines(treeRoot);
+      });
+    }, { passive: false });
+
+    function resetView() {
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      updateAllPositions();
+    }
+
+    function zoomIn() {
+      scale = Math.min(3, scale * 1.15);
+      updateAllPositions();
+    }
+
+    function zoomOut() {
+      scale = Math.max(0.2, scale * 0.87);
+      updateAllPositions();
+    }
+
+    // ==================== 键盘快捷键 ====================
+    document.addEventListener('keydown', (e) => {
+      if (editMode) return;
+      if (e.target.tagName === 'INPUT') return;
+
+      switch (e.key) {
+        case 'Tab': e.preventDefault(); addChild(); break;
+        case 'Enter': e.preventDefault(); addSibling(); break;
+        case 'Delete':
+        case 'Backspace': e.preventDefault(); deleteNode(); break;
+        case 'F2':
+          e.preventDefault();
+          const node = findNode(selectedId);
+          const el = domMap.get(selectedId);
+          if (node && el) startEdit(node, el);
+          break;
+        case 'z':
+          if (e.ctrlKey || e.metaKey) { e.preventDefault(); undo(); }
+          break;
+        case ' ': e.preventDefault(); resetView(); break;
+      }
+    });
+
+    window.addEventListener('resize', () => { updateAllPositions(); });
+
+    // ==================== 存档 ====================
+    const STORAGE_KEY = 'mindmap_save';
+
+    function saveToStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ root: treeRoot, theme: currentTheme }));
+      } catch (e) {}
+    }
+
+    function loadFromStorage() {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (data) return JSON.parse(data);
+      } catch (e) {}
+      return null;
+    }
+
+    const _origPushUndo = pushUndo;
+    pushUndo = function() {
+      _origPushUndo();
+      saveToStorage();
+    };
+
+    // ==================== 启动 ====================
+    function init() {
+      const saved = loadFromStorage();
+      if (saved) {
+        treeRoot = saved.root;
+        if (saved.theme) currentTheme = saved.theme;
+        function maxId(node) {
+          const num = parseInt(node.id.replace('n', ''));
+          let m = num;
+          for (const c of node.children) m = Math.max(m, maxId(c));
+          return m;
+        }
+        idCounter = maxId(treeRoot);
+      } else {
+        treeRoot = createNodeData('中心主题');
+      }
+      selectedId = treeRoot.id;
+      applyTheme(currentTheme);
+      pushUndo();
+      renderAll();
+      buildPanel();
+    }
+
+    init();
+  </script>
+</body>
+</html>
