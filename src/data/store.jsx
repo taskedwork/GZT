@@ -7,10 +7,25 @@
  * v2.1: 集成后端 API + WebSocket 实时同步
  */
 
-import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect, useRef } from 'react'
+import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect, useRef, useState } from 'react'
 import { authAPI, projectAPI, setToken, clearToken, getStoredUser, setStoredUser, clearStoredUser } from './api'
 import syncClient from './sync'
 import { pushToGist, pullFromGist, getSyncInfo } from './gistSync'
+import {
+  initDefaultUsers,
+  login as feLogin,
+  register as feRegister,
+  getUsers as feGetUsers,
+  setSession as feSetSession,
+  clearSession as feClearSession,
+  getStoredUser as feGetStoredUser,
+  getCurrentUser as feGetCurrentUser,
+  replaceAllUsers as feReplaceAllUsers,
+  updateUser as feUpdateUser,
+  removeUser as feRemoveUser,
+  changePassword as feChangePassword,
+} from './frontendAuth'
+import { checkBackendAvailable, getProject as dbGetProject, saveProject as dbSaveProject, getAllUsers as dbGetAllUsers } from './db'
 
 // ============================================================
 //  角色定义（系统固定）
@@ -501,12 +516,54 @@ export function AppProvider({ children }) {
   const stateRef = useRef(state)     // 持有最新 state，供回调使用
   stateRef.current = state
 
-  // ===== 从后端加载用户列表 =====
+  // ===== 模式检测：后端可用 → backend 模式；不可用 → frontend 模式 =====
+  // 'detecting' | 'backend' | 'frontend'
+  const [appMode, setAppMode] = useState('detecting')
+  const frontendModeRef = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    checkBackendAvailable().then(async (available) => {
+      if (cancelled) return
+      const mode = available ? 'backend' : 'frontend'
+      frontendModeRef.current = mode === 'frontend'
+      if (mode === 'frontend') {
+        // 纯前端模式：先初始化默认用户并加载，再切换模式（避免登录页显示空列表）
+        try {
+          await initDefaultUsers()
+          const res = await feGetUsers()
+          if (!cancelled) {
+            dispatch({ type: 'LOAD_USERS', payload: res.users })
+            setAppMode('frontend')
+          }
+        } catch (err) {
+          console.error('前端模式初始化失败:', err)
+          // 即使失败也切换到前端模式，让用户看到错误提示
+          if (!cancelled) setAppMode('frontend')
+        }
+      } else {
+        // 后端模式：从后端加载用户
+        setAppMode('backend')
+        try {
+          const res = await authAPI.getUsers()
+          if (res.users) dispatch({ type: 'LOAD_USERS', payload: res.users })
+        } catch (err) {
+          console.error('加载用户列表失败:', err)
+        }
+      }
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  // ===== 加载用户列表（自动适配模式）=====
   const loadUsers = useCallback(async () => {
     try {
-      const res = await authAPI.getUsers()
-      if (res.users) {
+      if (frontendModeRef.current) {
+        const res = await feGetUsers()
         dispatch({ type: 'LOAD_USERS', payload: res.users })
+      } else {
+        const res = await authAPI.getUsers()
+        if (res.users) dispatch({ type: 'LOAD_USERS', payload: res.users })
       }
     } catch (err) {
       console.error('加载用户列表失败:', err)
@@ -516,6 +573,17 @@ export function AppProvider({ children }) {
   // ===== 登录 =====
   const login = useCallback(async (username, password) => {
     try {
+      if (frontendModeRef.current) {
+        // 纯前端模式：IndexedDB 验证
+        const res = await feLogin(username, password)
+        if (!res.success) return { success: false, error: res.error }
+        feSetSession(res.token, res.user)
+        dispatch({ type: 'LOGIN', payload: res.user })
+        loadUsers()
+        await loadProjectData()
+        return { success: true, user: res.user }
+      }
+      // 后端模式
       const res = await authAPI.login(username, password)
       setToken(res.token)
       setStoredUser(res.user)
@@ -534,6 +602,14 @@ export function AppProvider({ children }) {
   // ===== 注册 =====
   const register = useCallback(async (username, password, name) => {
     try {
+      if (frontendModeRef.current) {
+        const res = await feRegister(username, password, name)
+        if (!res.success) return { success: false, error: res.error }
+        feSetSession(res.token, res.user)
+        dispatch({ type: 'LOGIN', payload: res.user })
+        loadUsers()
+        return { success: true, user: res.user }
+      }
       const res = await authAPI.register(username, password, name)
       setToken(res.token)
       setStoredUser(res.user)
@@ -548,15 +624,46 @@ export function AppProvider({ children }) {
 
   // ===== 登出 =====
   const logout = useCallback(() => {
-    syncClient.disconnect()
-    clearToken()
-    clearStoredUser()
+    if (!frontendModeRef.current) {
+      syncClient.disconnect()
+      clearToken()
+      clearStoredUser()
+    } else {
+      feClearSession()
+    }
     dispatch({ type: 'LOGOUT' })
   }, [])
 
-  // ===== 从后端加载项目数据 =====
+  // ===== 加载项目数据（后端模式从 API，前端模式从 IndexedDB）=====
   const loadProjectData = useCallback(async () => {
     try {
+      if (frontendModeRef.current) {
+        // 纯前端模式：从 IndexedDB 加载
+        const project = await dbGetProject('default')
+        if (project && project.mmNodes) {
+          dispatch({ type: 'SET_MM_DATA', payload: { nodes: project.mmNodes || [], edges: project.mmEdges || [] } })
+          if (project.nodeStyles) {
+            Object.entries(project.nodeStyles).forEach(([nodeId, style]) => {
+              Object.entries(style).forEach(([key, value]) => {
+                dispatch({ type: 'UPDATE_NODE_STYLE', payload: { nodeId, styleKey: key, value } })
+              })
+            })
+          }
+          if (project.nodeLabels) {
+            Object.entries(project.nodeLabels).forEach(([nodeId, label]) => {
+              dispatch({ type: 'UPDATE_NODE_LABEL', payload: { nodeId, label } })
+            })
+          }
+          if (project.nodeFontStyles) {
+            dispatch({ type: 'SET_NODE_FONT_STYLES', payload: project.nodeFontStyles })
+          }
+          if (project.customPositions) {
+            dispatch({ type: 'SET_CUSTOM_POSITIONS', payload: project.customPositions })
+          }
+        }
+        return
+      }
+      // 后端模式
       const res = await projectAPI.get('default')
       const project = res.project || res
       if (project && project.mmNodes) {
@@ -580,23 +687,37 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  // ===== 保存数据到后端（防抖）=====
+  // ===== 保存数据（后端模式 → API，前端模式 → IndexedDB，防抖）=====
   const saveToServer = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(async () => {
+      const cur = stateRef.current
       try {
-        await projectAPI.patch('default', {
-          mmNodes: state.mmNodes,
-          mmEdges: state.mmEdges,
-          nodeStyles: state.nodeStyles,
-          nodeLabels: state.nodeLabels,
-        })
+        if (frontendModeRef.current) {
+          await dbSaveProject({
+            id: 'default',
+            mmNodes: cur.mmNodes,
+            mmEdges: cur.mmEdges,
+            nodeStyles: cur.nodeStyles,
+            nodeLabels: cur.nodeLabels,
+            nodeFontStyles: cur.nodeFontStyles,
+            customPositions: cur.customPositions,
+            updatedAt: new Date().toISOString(),
+          })
+        } else {
+          await projectAPI.patch('default', {
+            mmNodes: cur.mmNodes,
+            mmEdges: cur.mmEdges,
+            nodeStyles: cur.nodeStyles,
+            nodeLabels: cur.nodeLabels,
+          })
+        }
         dispatch({ type: 'SET_LAST_SYNC', payload: new Date().toISOString() })
       } catch (err) {
         console.error('保存失败:', err)
       }
     }, 1000)
-  }, [state.mmNodes, state.mmEdges, state.nodeStyles, state.nodeLabels])
+  }, [])
 
   // ===== WebSocket 同步回调 =====
   useEffect(() => {
@@ -660,12 +781,31 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  // ===== 自动登录 =====
+  // ===== 自动登录（模式确定后执行）=====
   useEffect(() => {
+    if (appMode === 'detecting') return
+
+    // 纯前端模式：从 localStorage 恢复会话，从 IndexedDB 加载数据
+    if (appMode === 'frontend') {
+      const storedUser = feGetStoredUser()
+      if (!storedUser) return
+      feGetCurrentUser().then((freshUser) => {
+        if (freshUser) {
+          dispatch({ type: 'LOGIN', payload: freshUser })
+          feSetSession(localStorage.getItem('sdd_token') || '', freshUser)
+          loadUsers()
+          loadProjectData()
+        } else {
+          feClearSession()
+        }
+      })
+      return
+    }
+
+    // 后端模式
     const storedUser = getStoredUser()
     if (!storedUser) return
 
-    // 确保后端已启动（通过 preview 服务器的管理 API）
     const ensureBackendRunning = async () => {
       try {
         const statusRes = await fetch('/api/manage/backend-status')
@@ -689,7 +829,6 @@ export function AppProvider({ children }) {
 
     ensureBackendRunning().then((ok) => {
       if (!ok) {
-        // 后端启动失败，仍允许本地登录
         dispatch({ type: 'LOGIN', payload: storedUser })
         return
       }
@@ -710,14 +849,21 @@ export function AppProvider({ children }) {
         clearStoredUser()
       })
     })
-  }, [])
+  }, [appMode])
 
   // ===== 数据变更时自动保存 + 广播 =====
   useEffect(() => {
     if (!state.isLoggedIn) return
-    if (!state.settings?.wsSync) return
     if (syncLockRef.current) return
 
+    // 纯前端模式：仅保存到 IndexedDB，跳过 WebSocket 广播
+    if (frontendModeRef.current) {
+      saveToServer()
+      return
+    }
+
+    // 后端模式：保存 + WebSocket 广播
+    if (!state.settings?.wsSync) return
     saveToServer()
     syncClient.broadcastSync({
       mmNodes: state.mmNodes,
@@ -745,9 +891,10 @@ export function AppProvider({ children }) {
     }
   }, [state.mmNodes, state.mmEdges, state.nodeStyles, state.nodeLabels, state.customPositions, state.nodeFontStyles, state.isLoggedIn])
 
-  // ===== 定期从服务器拉取最新数据（每60秒）=====
+  // ===== 定期从服务器拉取最新数据（每60秒，仅后端模式）=====
   useEffect(() => {
     if (!state.isLoggedIn) return
+    if (frontendModeRef.current) return
     if (!state.settings?.wsSync) return
     const timer = setInterval(() => {
       if (!syncLockRef.current) {
@@ -913,13 +1060,17 @@ export function AppProvider({ children }) {
       }
       // mode === 'local' => 什么都不做，保留本地数据
 
-      // Gist 来源：更新 settings 和同步时间
+      // Gist 来源：更新 settings、用户列表和同步时间
       if (ps.source === 'gist' && mode !== 'local') {
         const remote = ps.remoteData
         if (remote.settings) {
           const safeRemoteSettings = { ...remote.settings }
           delete safeRemoteSettings.gistToken
           dispatch({ type: 'UPDATE_SETTINGS', payload: safeRemoteSettings })
+        }
+        // 纯前端模式：同步用户列表到 IndexedDB
+        if (frontendModeRef.current && remote.users) {
+          feReplaceAllUsers(remote.users).then(() => loadUsers())
         }
         const now = new Date().toISOString()
         localStorage.setItem('sdd_gist_last_sync', now)
@@ -944,7 +1095,8 @@ export function AppProvider({ children }) {
       const safeSettings = { ...currentState.settings }
       delete safeSettings.gistToken
 
-      const result = await pushToGist(token, {
+      // 纯前端模式：附带用户列表（含密码哈希，用于跨设备同步账号）
+      const payload = {
         mmNodes: currentState.mmNodes,
         mmEdges: currentState.mmEdges,
         nodeStyles: currentState.nodeStyles,
@@ -953,7 +1105,12 @@ export function AppProvider({ children }) {
         customPositions: currentState.customPositions,
         settings: safeSettings,
         pushedBy: currentState.currentUser?.name || 'unknown',
-      })
+      }
+      if (frontendModeRef.current) {
+        payload.users = await dbGetAllUsers()
+      }
+
+      const result = await pushToGist(token, payload)
       if (result.success) {
         const now = new Date().toISOString()
         localStorage.setItem('sdd_gist_last_sync', now)
@@ -1101,13 +1258,49 @@ export function AppProvider({ children }) {
     return roots
   }, [state.mmNodes, state.mmEdges])
 
+  // ===== 团队成员管理（前端模式持久化到 IndexedDB）=====
+  const addTeamMember = useCallback(async (m) => {
+    if (frontendModeRef.current) {
+      // 纯前端模式：通过 frontendAuth 创建用户（bcrypt 哈希密码）
+      const username = m.username || ('tm_' + Date.now())
+      const res = await feRegister(username, '123456', m.name, m.role)
+      if (res.success) {
+        dispatch({ type: 'ADD_TEAM_MEMBER', payload: { ...m, id: res.user.id, username } })
+      }
+    } else {
+      dispatch({ type: 'ADD_TEAM_MEMBER', payload: m })
+    }
+  }, [])
+
+  const updateTeamMember = useCallback(async (id, updates) => {
+    if (frontendModeRef.current) {
+      await feUpdateUser(id, { name: updates.name, systemRole: updates.role })
+    }
+    dispatch({ type: 'UPDATE_TEAM_MEMBER', payload: { id, ...updates } })
+  }, [])
+
+  const deleteTeamMember = useCallback(async (id) => {
+    if (frontendModeRef.current) {
+      const cur = stateRef.current
+      await feRemoveUser(id, cur.currentUser?.id)
+    }
+    dispatch({ type: 'DELETE_TEAM_MEMBER', payload: id })
+  }, [])
+
+  // ===== 修改密码（前端模式用 IndexedDB，后端模式用 API）=====
+  const changePassword = useCallback(async (oldPassword, newPassword) => {
+    if (frontendModeRef.current) {
+      const cur = stateRef.current
+      return feChangePassword(cur.currentUser?.id, oldPassword, newPassword)
+    }
+    return authAPI.changePassword(oldPassword, newPassword)
+  }, [])
+
   const value = {
     state, dispatch,
     // 系统
-    users: state.users, login, register, logout, roles, teamMembers: state.teamMembers, loadUsers,
-    addTeamMember: (m) => dispatch({ type: 'ADD_TEAM_MEMBER', payload: m }),
-    updateTeamMember: (id, updates) => dispatch({ type: 'UPDATE_TEAM_MEMBER', payload: { id, ...updates } }),
-    deleteTeamMember: (id) => dispatch({ type: 'DELETE_TEAM_MEMBER', payload: id }),
+    appMode, users: state.users, login, register, logout, roles, teamMembers: state.teamMembers, loadUsers,
+    addTeamMember, updateTeamMember, deleteTeamMember, changePassword,
     toggleDarkMode, setView, setRole,
     // 项目信息
     projectInfo, progress, currentRoleData, treeData,

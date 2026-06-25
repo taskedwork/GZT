@@ -29,8 +29,8 @@ const PERMISSIONS = {
 }
 
 export default function TeamManagement() {
-  const { teamMembers, roles, addTeamMember, updateTeamMember, deleteTeamMember, state } = useApp()
-  const isStandalone = state.settings?.standalone !== false
+  const { teamMembers, roles, addTeamMember, updateTeamMember, deleteTeamMember, state, appMode } = useApp()
+  const useBackend = appMode === 'backend'
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newRole, setNewRole] = useState('partner')
@@ -62,8 +62,8 @@ export default function TeamManagement() {
     const group = newRole === 'outsider' ? '外包单位' : '伙伴'
     const name = newName.trim()
 
-    // 连接模式：同步到后端 users.json
-    if (!isStandalone) {
+    // 后端模式：同步到后端 users.json；前端模式：store 自动持久化到 IndexedDB
+    if (useBackend) {
       try {
         const username = 'tm_' + Date.now()
         const res = await fetch(`${getApiBase()}/admin/users`, {
@@ -78,12 +78,13 @@ export default function TeamManagement() {
         if (data.user) {
           addTeamMember({ id: data.user.id, name: data.user.name, role: newRole, roleLabel: roleObj?.name || newRole, group, username: data.user.username })
         } else {
-          addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group })
+          addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group, username })
         }
       } catch {
         addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group })
       }
     } else {
+      // 前端模式：addTeamMember 会通过 frontendAuth 创建用户并持久化
       addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group })
     }
     setNewName('')
@@ -95,8 +96,8 @@ export default function TeamManagement() {
     if (!editName.trim()) return
     const roleObj = roles.find(r => r.id === editRole)
     const group = editRole === 'outsider' ? '外包单位' : '伙伴'
-    // 连接模式：同步到后端
-    if (!isStandalone) {
+    // 后端模式：同步到后端；前端模式：store 自动持久化
+    if (useBackend) {
       try {
         await fetch(`${getApiBase()}/admin/users/${id}`, {
           method: 'PUT',
@@ -212,7 +213,7 @@ export default function TeamManagement() {
                       <button className="btn-icon-sm" title="编辑" onClick={() => startEdit(m)}>✎</button>
                       {m.role !== 'manager' && (
                         <button className="btn-icon-sm btn-icon-danger" title="移除" onClick={async () => {
-                          if (!isStandalone) {
+                          if (useBackend) {
                             try {
                               await fetch(`${getApiBase()}/admin/users/${m.id}`, {
                                 method: 'DELETE',

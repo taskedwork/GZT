@@ -7,7 +7,7 @@ import { useApp } from '../data/store'
 import { validateToken, getSyncInfo } from '../data/gistSync'
 
 export default function Settings() {
-  const { state, updateSettings, dispatch, saveToServer, logout, gistPush, gistPull, syncClient } = useApp()
+  const { state, updateSettings, dispatch, saveToServer, logout, gistPush, gistPull, syncClient, changePassword } = useApp()
   const s = state.settings || {}
 
   // 修改密码状态
@@ -140,18 +140,12 @@ export default function Settings() {
     if (!newPwd) { showMsg('请输入新密码'); return }
     if (newPwd !== confirmPwd) { showMsg('两次新密码不一致'); return }
     try {
-      const token = localStorage.getItem('sdd_token')
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
-      })
-      const data = await res.json()
-      if (res.ok) {
+      const result = await changePassword(oldPwd, newPwd)
+      if (result.success || result.user) {
         showMsg('密码修改成功')
         setOldPwd(''); setNewPwd(''); setConfirmPwd('')
       } else {
-        showMsg(data.error || '修改失败')
+        showMsg(result.error || '修改失败')
       }
     } catch { showMsg('网络错误') }
   }

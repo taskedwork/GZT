@@ -1,5 +1,9 @@
 /**
- * 登录页面 - 从后端获取用户列表 + API 认证
+ * 登录页面 - 自动适配后端/纯前端模式
+ *
+ * - appMode === 'detecting': 显示加载中
+ * - appMode === 'frontend':  纯前端模式，用户列表来自 IndexedDB
+ * - appMode === 'backend':   后端模式，用户列表来自后端 API
  */
 
 import React, { useState, useEffect } from 'react'
@@ -8,43 +12,32 @@ import { useApp } from '../data/store'
 const roleLabel = { manager: '管理员', partner: '伙伴', outsider: '外包单位', member: '成员' }
 
 export default function LoginPage() {
-  const { login, state } = useApp()
+  const { login, state, appMode, loadUsers } = useApp()
   const [selectedUser, setSelectedUser] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [users, setUsers] = useState([])
-  const [loadFailed, setLoadFailed] = useState(false)
-  const [serverInput, setServerInput] = useState(localStorage.getItem('sdd_server_host') || 'localhost')
   const [showServerConfig, setShowServerConfig] = useState(false)
+  const [serverInput, setServerInput] = useState(localStorage.getItem('sdd_server_host') || 'localhost')
 
-  // 从后端加载用户列表
-  const loadUsers = () => {
-    const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
-    const serverHost = localStorage.getItem('sdd_server_host') || 'localhost'
-    const API_BASE = isLocalPreview ? '/api' : `http://${serverHost}:3001/api`
-    fetch(`${API_BASE}/auth/users`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.users && data.users.length > 0) {
-          setUsers(data.users)
-          setLoadFailed(false)
-        } else {
-          setLoadFailed(true)
-        }
-      })
-      .catch(() => setLoadFailed(true))
-  }
+  // 用户列表来自 store（由模式检测 effect 统一加载）
+  const users = state.users || []
+  const loadFailed = appMode === 'backend' && users.length === 0
 
-  useEffect(() => { loadUsers() }, [])
+  // 后端模式且用户列表为空时，尝试重新加载
+  useEffect(() => {
+    if (appMode === 'backend' && users.length === 0) {
+      loadUsers()
+    }
+  }, [appMode])
 
   // 保存服务器地址并重新加载
   const handleSaveServer = () => {
     const host = serverInput.trim() || 'localhost'
     localStorage.setItem('sdd_server_host', host)
     setShowServerConfig(false)
-    setLoadFailed(false)
-    loadUsers()
+    // 重置后端检测缓存并重新加载页面以应用新的服务器地址
+    window.location.reload()
   }
 
   async function handleLogin() {
@@ -67,6 +60,22 @@ export default function LoginPage() {
 
   function handleKeyDown(e) {
     if (e.key === 'Enter') handleLogin()
+  }
+
+  // 模式检测中：显示加载状态
+  if (appMode === 'detecting') {
+    return (
+      <div className="login-wrap">
+        <div className="login-card">
+          <h1>工作台</h1>
+          <p className="sub">正在检测运行环境...</p>
+          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--muted)', fontSize: '.75rem' }}>
+            <div style={{ display: 'inline-block', width: 24, height: 24, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ marginTop: 10 }}>正在连接服务器或初始化本地模式</div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -92,6 +101,11 @@ export default function LoginPage() {
               >
                 配置服务器地址
               </span>
+            </div>
+          )}
+          {appMode === 'frontend' && users.length > 0 && (
+            <div style={{ fontSize: '.6rem', color: 'var(--muted)', marginTop: 4 }}>
+              本地模式 · 数据存储于本设备，可通过 Gist 同步
             </div>
           )}
           {showServerConfig && (
