@@ -30,6 +30,7 @@ const PERMISSIONS = {
 
 export default function TeamManagement() {
   const { teamMembers, roles, addTeamMember, updateTeamMember, deleteTeamMember, state } = useApp()
+  const isStandalone = state.settings?.standalone !== false
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newRole, setNewRole] = useState('partner')
@@ -51,21 +52,62 @@ export default function TeamManagement() {
     grouped[g].push(m)
   })
 
-  const handleAdd = () => {
+  const getApiBase = () => import.meta.env.PROD ? '/api' : `http://${window.location.hostname}:3001/api`
+  const getToken = () => localStorage.getItem('sdd_token')
+
+  const handleAdd = async () => {
     if (!newName.trim()) return
     const id = 'tm_' + Date.now()
     const roleObj = roles.find(r => r.id === newRole)
     const group = newRole === 'outsider' ? '外包单位' : '伙伴'
-    addTeamMember({ id, name: newName.trim(), role: newRole, roleLabel: roleObj?.name || newRole, group })
+    const name = newName.trim()
+
+    // 连接模式：同步到后端 users.json
+    if (!isStandalone) {
+      try {
+        const username = 'tm_' + Date.now()
+        const res = await fetch(`${getApiBase()}/admin/users`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + getToken(),
+          },
+          body: JSON.stringify({ username, password: '123456', name, systemRole: newRole }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (data.user) {
+          addTeamMember({ id: data.user.id, name: data.user.name, role: newRole, roleLabel: roleObj?.name || newRole, group, username: data.user.username })
+        } else {
+          addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group })
+        }
+      } catch {
+        addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group })
+      }
+    } else {
+      addTeamMember({ id, name, role: newRole, roleLabel: roleObj?.name || newRole, group })
+    }
     setNewName('')
     setNewRole('partner')
     setShowAdd(false)
   }
 
-  const handleUpdate = (id) => {
+  const handleUpdate = async (id) => {
     if (!editName.trim()) return
     const roleObj = roles.find(r => r.id === editRole)
     const group = editRole === 'outsider' ? '外包单位' : '伙伴'
+    // 连接模式：同步到后端
+    if (!isStandalone) {
+      try {
+        await fetch(`${getApiBase()}/admin/users/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + getToken(),
+          },
+          body: JSON.stringify({ name: editName.trim(), systemRole: editRole }),
+        })
+      } catch {}
+    }
     updateTeamMember(id, { name: editName.trim(), role: editRole, roleLabel: roleObj?.name || editRole, group })
     setEditingId(null)
   }
@@ -169,7 +211,17 @@ export default function TeamManagement() {
                     <div className="team-mgmt-card-actions">
                       <button className="btn-icon-sm" title="编辑" onClick={() => startEdit(m)}>✎</button>
                       {m.role !== 'manager' && (
-                        <button className="btn-icon-sm btn-icon-danger" title="移除" onClick={() => deleteTeamMember(m.id)}>✕</button>
+                        <button className="btn-icon-sm btn-icon-danger" title="移除" onClick={async () => {
+                          if (!isStandalone) {
+                            try {
+                              await fetch(`${getApiBase()}/admin/users/${m.id}`, {
+                                method: 'DELETE',
+                                headers: { Authorization: 'Bearer ' + getToken() },
+                              })
+                            } catch {}
+                          }
+                          deleteTeamMember(m.id)
+                        }}>✕</button>
                       )}
                     </div>
                   )}

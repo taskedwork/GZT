@@ -1,12 +1,11 @@
 /**
  * API 客户端 - 与后端服务通信
- * 生产模式：同源请求（/api）
- * 开发模式：http://localhost:3001/api
+ * 本地 preview：/api（通过 vite proxy 转发）
+ * GitHub Pages / 本地 dev：http://localhost:3001/api（直连本地后端）
  */
 
-const API_BASE = import.meta.env.PROD
-  ? '/api'
-  : 'http://localhost:3001/api'
+const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
+const API_BASE = isLocalPreview ? '/api' : 'http://localhost:3001/api'
 
 // 获取存储的 token
 function getToken() {
@@ -40,6 +39,9 @@ async function request(path, options = {}) {
 
 // ===== 认证 API =====
 export const authAPI = {
+  // 获取用户列表（公开接口）
+  getUsers: () => request('/auth/users'),
+
   // 登录
   login: (username, password) => request('/auth/login', {
     method: 'POST',

@@ -371,4 +371,11 @@ function broadcast(projectId, message, excludeConnId) {
   });
 }
 
-module.exports = { initWebSocket };
+/**
+ * 获取在线用户数量
+ */
+function getOnlineUserCount() {
+  return getOnlineUsers().length;
+}
+
+module.exports = { initWebSocket, getOnlineUsers, getOnlineUserCount };

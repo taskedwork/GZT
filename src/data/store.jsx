@@ -10,36 +10,11 @@
 import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect, useRef } from 'react'
 import { authAPI, projectAPI, setToken, clearToken, getStoredUser, setStoredUser, clearStoredUser } from './api'
 import syncClient from './sync'
+import { pushToGist, pullFromGist, getSyncInfo } from './gistSync'
 
 // ============================================================
-//  登录用户
+//  角色定义（系统固定）
 // ============================================================
-const loginUsers = [
-  { id: 'admin', name: '深东', password: '', systemRole: 'manager', label: '深东 (管理员)' },
-  { id: 'member1', name: '东哥哥', password: '', systemRole: 'partner', label: '东哥哥 (伙伴)' },
-  { id: 'member2', name: '老蔡', password: '', systemRole: 'partner', label: '老蔡 (伙伴)' },
-  { id: 'member3', name: '小北哥', password: '', systemRole: 'partner', label: '小北哥 (伙伴)' },
-  { id: 'member4', name: '孙博文', password: '', systemRole: 'partner', label: '孙博文 (伙伴)' },
-  { id: 'member5', name: '财务王姐', password: '', systemRole: 'partner', label: '财务王姐 (伙伴)' },
-  { id: 'outsource1', name: '灯光', password: '123', systemRole: 'outsider', label: '灯光 (外包单位)' },
-  { id: 'outsource2', name: '施工图', password: '123', systemRole: 'outsider', label: '施工图 (外包单位)' },
-  { id: 'outsource3', name: '其他', password: '123', systemRole: 'outsider', label: '其他 (外包单位)' },
-]
-
-// 团队小伙伴预设
-const defaultTeamMembers = [
-  { id: 'tm_1', name: '深东', role: 'manager', roleLabel: '管理员', group: '伙伴' },
-  { id: 'tm_2', name: '东哥哥', role: 'partner', roleLabel: '伙伴', group: '伙伴' },
-  { id: 'tm_3', name: '老蔡', role: 'partner', roleLabel: '伙伴', group: '伙伴' },
-  { id: 'tm_4', name: '小北哥', role: 'partner', roleLabel: '伙伴', group: '伙伴' },
-  { id: 'tm_5', name: '孙博文', role: 'partner', roleLabel: '伙伴', group: '伙伴' },
-  { id: 'tm_6', name: '财务王姐', role: 'partner', roleLabel: '伙伴', group: '伙伴' },
-  { id: 'tm_7', name: '灯光', role: 'outsider', roleLabel: '外包单位', group: '外包单位' },
-  { id: 'tm_8', name: '施工图', role: 'outsider', roleLabel: '外包单位', group: '外包单位' },
-  { id: 'tm_9', name: '其他', role: 'outsider', roleLabel: '外包单位', group: '外包单位' },
-]
-
-// 角色定义
 const roles = [
   { id: 'manager', name: '管理员', level: 0 },
   { id: 'partner', name: '伙伴', level: 1 },
@@ -49,6 +24,35 @@ const roles = [
 // ============================================================
 //  初始状态
 // ============================================================
+const SETTINGS_KEY = 'sdd_settings'
+const MM_DATA_KEY = 'sdd_mm_data'  // 思维导图数据本地缓存
+
+// 从 localStorage 恢复设置
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (raw) {
+      const s = JSON.parse(raw)
+      // 固定连接模式，忽略 standalone 设置
+      s.standalone = false
+      return s
+    }
+  } catch {}
+  return null
+}
+
+// 从 localStorage 恢复思维导图数据（本地缓存）
+function loadMmData() {
+  try {
+    const raw = localStorage.getItem(MM_DATA_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return null
+}
+
+const savedSettings = loadSettings()
+const savedMmData = loadMmData()
+
 const initialState = {
   // ---- 登录系统 ----
   isLoggedIn: false,
@@ -61,18 +65,18 @@ const initialState = {
   activeView: 'dashboard',
   currentRole: null,
 
-  // ---- 思维导图数据（核心）----
-  mmNodes: [],       // 节点列表 [{id, label, type, ...}]
-  mmEdges: [],       // 边列表 [{from, to}]
+  // ---- 思维导图数据（核心，独立模式从本地缓存恢复）----
+  mmNodes: savedMmData?.mmNodes || [],       // 节点列表 [{id, label, type, ...}]
+  mmEdges: savedMmData?.mmEdges || [],       // 边列表 [{from, to}]
 
   // ---- 思维导图 UI 状态 ----
   selectedNodes: new Set(),
   editingNode: null,
   editText: '',
   collapsedNodes: new Set(),
-  nodeStyles: {},    // { nodeId: { fillColor, textColor, fontSize } }
-  nodeLabels: {},    // 自定义标签覆盖
-  customPositions: {}, // 拖拽后的位置
+  nodeStyles: savedMmData?.nodeStyles || {},    // { nodeId: { fillColor, textColor, fontSize } }
+  nodeLabels: savedMmData?.nodeLabels || {},    // 自定义标签覆盖
+  customPositions: savedMmData?.customPositions || {}, // 拖拽后的位置
   layoutMode: 'radial', // radial | tree_right | tree_down | compact
 
   // ---- 画布 ----
@@ -92,7 +96,7 @@ const initialState = {
   clipboard: null,     // { type: 'copy'|'cut', nodes: [], edges: [] }
 
   // ---- 节点文字格式 ----
-  nodeFontStyles: {},  // { nodeId: { bold, italic, underline } }
+  nodeFontStyles: savedMmData?.nodeFontStyles || {},  // { nodeId: { bold, italic, underline } }
 
   // ---- 历史 ----
   history: [],
@@ -106,11 +110,16 @@ const initialState = {
   onlineUsers: [],        // 在线用户列表
   lockedNodes: {},        // { nodeId: { userId, userName } } 被其他用户锁定的节点
   lastSyncAt: null,       // 上次同步时间
+  pendingSync: null,      // 待处理的远端更新 { diff, remoteData, localData, timestamp }
+  syncNotifVisible: false, // 对比弹窗是否显示（点击提示后才显示）
+  gistSyncStatus: 'idle', // idle | pushing | pulling | error
+  gistLastSync: null,     // 上次 Gist 同步时间
 
-  // ---- 团队小伙伴 ----
-  teamMembers: defaultTeamMembers,
+  // ---- 团队小伙伴（从后端加载）----
+  users: [],              // 后端用户列表
+  teamMembers: [],        // 从后端用户列表派生
 
-  // ---- 设置 ----
+  // ---- 设置（从 localStorage 恢复，合并默认值）----
   settings: {
     privacyMode: false,       // 隐私保护：个人待办不导出
     pomDuration: 25,          // 番茄钟时长（分钟）
@@ -118,6 +127,9 @@ const initialState = {
     exportFolder: '',         // 导出文件夹路径
     gistSync: false,          // Gist自动同步开关
     gistToken: '',            // Gist Token
+    wsSync: true,             // WebSocket 实时数据同步开关
+    standalone: false,        // 固定连接模式
+    ...(savedSettings || {}),
   },
 }
 
@@ -132,17 +144,41 @@ function appReducer(state, action) {
     case 'SET_ROLE':
       return { ...state, currentRole: action.payload }
 
-    // ===== 团队小伙伴管理 =====
+    // ===== 用户数据（从后端加载）=====
+    case 'LOAD_USERS': {
+      const users = action.payload
+      // 从后端用户列表派生 teamMembers
+      const teamMembers = users.map(u => ({
+        id: u.id,
+        name: u.name,
+        role: u.systemRole,
+        roleLabel: u.roleLabel || u.systemRole,
+        group: u.group || (u.systemRole === 'outsider' ? '外包单位' : '伙伴'),
+        username: u.username,
+        avatar: u.avatar,
+      }))
+      return { ...state, users, teamMembers }
+    }
+
+    // ===== 团队小伙伴管理（本地即时更新，后端已同步）=====
     case 'ADD_TEAM_MEMBER': {
       const newMember = action.payload
-      return { ...state, teamMembers: [...state.teamMembers, newMember] }
+      return { ...state, teamMembers: [...state.teamMembers, newMember], users: [...state.users, newMember] }
     }
     case 'UPDATE_TEAM_MEMBER': {
       const { id, ...updates } = action.payload
-      return { ...state, teamMembers: state.teamMembers.map(m => m.id === id ? { ...m, ...updates } : m) }
+      return {
+        ...state,
+        teamMembers: state.teamMembers.map(m => m.id === id ? { ...m, ...updates } : m),
+        users: state.users.map(u => u.id === id ? { ...u, ...updates } : u),
+      }
     }
     case 'DELETE_TEAM_MEMBER': {
-      return { ...state, teamMembers: state.teamMembers.filter(m => m.id !== action.payload) }
+      return {
+        ...state,
+        teamMembers: state.teamMembers.filter(m => m.id !== action.payload),
+        users: state.users.filter(u => u.id !== action.payload),
+      }
     }
 
     // ===== 登录 =====
@@ -169,14 +205,45 @@ function appReducer(state, action) {
     }
     case 'SET_LAST_SYNC':
       return { ...state, lastSyncAt: action.payload }
+    case 'SET_PENDING_SYNC':
+      return { ...state, pendingSync: action.payload }
+    case 'CLEAR_PENDING_SYNC':
+      return { ...state, pendingSync: null, syncNotifVisible: false }
+    case 'SHOW_SYNC_NOTIF':
+      return { ...state, syncNotifVisible: true }
+    case 'HIDE_SYNC_NOTIF':
+      return { ...state, syncNotifVisible: false }
+    case 'SET_GIST_SYNC_STATUS':
+      return { ...state, gistSyncStatus: action.payload }
+    case 'SET_GIST_LAST_SYNC':
+      return { ...state, gistLastSync: action.payload }
 
     // ===== 主题 =====
     case 'TOGGLE_DARK_MODE':
       return { ...state, darkMode: !state.darkMode }
 
     // ===== 设置 =====
-    case 'UPDATE_SETTINGS':
-      return { ...state, settings: { ...state.settings, ...action.payload } }
+    case 'UPDATE_SETTINGS': {
+      const newSettings = { ...state.settings, ...action.payload }
+      // 持久化到 localStorage
+      try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings)) } catch {}
+      return { ...state, settings: newSettings }
+    }
+
+    // ===== 清空本地数据（切换同步方式时使用）=====
+    case 'CLEAR_LOCAL_DATA':
+      return {
+        ...state,
+        mmNodes: [],
+        mmEdges: [],
+        nodeStyles: {},
+        nodeLabels: {},
+        customPositions: {},
+        nodeFontStyles: {},
+        history: [],
+        historyIndex: -1,
+        pendingSync: null,
+      }
 
     // ===== 思维导图数据操作 =====
     case 'SET_MM_DATA':
@@ -287,6 +354,8 @@ function appReducer(state, action) {
       return { ...state, layoutMode: action.payload }
     case 'SET_CUSTOM_POSITIONS':
       return { ...state, customPositions: action.payload }
+    case 'SET_NODE_FONT_STYLES':
+      return { ...state, nodeFontStyles: action.payload }
 
     // ===== 连接模式 =====
     case 'SET_CONNECT_MODE':
@@ -356,6 +425,71 @@ function appReducer(state, action) {
 }
 
 // ============================================================
+//  同步差异计算
+// ============================================================
+function computeSyncDiff(state, remoteData) {
+  const result = { hasChanges: false, added: [], removed: [], modified: [], edgeChanges: [], styleChanges: [] }
+
+  const remoteNodes = remoteData.mmNodes || []
+  const localMap = new Map(state.mmNodes.map(n => [n.id, n]))
+  const remoteMap = new Map(remoteNodes.map(n => [n.id, n]))
+
+  // 新增的节点（远端有，本地没有）
+  remoteNodes.forEach(n => {
+    if (!localMap.has(n.id)) {
+      result.added.push({ id: n.id, label: n.label || n.name || n.id, type: n.type })
+    }
+  })
+
+  // 删除的节点（本地有，远端没有）
+  state.mmNodes.forEach(n => {
+    if (!remoteMap.has(n.id)) {
+      result.removed.push({ id: n.id, label: n.label || n.name || n.id, type: n.type })
+    }
+  })
+
+  // 修改的节点（两边都有，但内容不同）
+  remoteNodes.forEach(rn => {
+    const ln = localMap.get(rn.id)
+    if (ln && JSON.stringify(ln) !== JSON.stringify(rn)) {
+      const changes = []
+      const allKeys = new Set([...Object.keys(ln), ...Object.keys(rn)])
+      allKeys.forEach(k => {
+        if (JSON.stringify(ln[k]) !== JSON.stringify(rn[k])) {
+          changes.push({ key: k, local: ln[k], remote: rn[k] })
+        }
+      })
+      result.modified.push({ id: rn.id, label: rn.label || rn.name || rn.id, type: rn.type, changes })
+    }
+  })
+
+  // 边变化
+  if (remoteData.mmEdges) {
+    const localEdgeStr = JSON.stringify(state.mmEdges)
+    const remoteEdgeStr = JSON.stringify(remoteData.mmEdges)
+    if (localEdgeStr !== remoteEdgeStr) {
+      result.edgeChanges.push({
+        localCount: state.mmEdges.length,
+        remoteCount: remoteData.mmEdges.length,
+      })
+    }
+  }
+
+  // 样式/位置/字体变化
+  const styleKeys = ['nodeStyles', 'nodeLabels', 'nodeFontStyles', 'customPositions']
+  styleKeys.forEach(key => {
+    const localStr = JSON.stringify(state[key] || {})
+    const remoteStr = JSON.stringify(remoteData[key] || {})
+    if (localStr !== remoteStr) {
+      result.styleChanges.push({ key, hasDiff: true })
+    }
+  })
+
+  result.hasChanges = result.added.length > 0 || result.removed.length > 0 || result.modified.length > 0 || result.edgeChanges.length > 0 || result.styleChanges.length > 0
+  return result
+}
+
+// ============================================================
 //  Context
 // ============================================================
 const AppContext = createContext(null)
@@ -364,23 +498,38 @@ export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
   const syncLockRef = useRef(false)  // 防止同步循环
   const saveTimerRef = useRef(null)  // 防抖保存定时器
+  const stateRef = useRef(state)     // 持有最新 state，供回调使用
+  stateRef.current = state
 
-  // ===== 登录（通过后端 API）=====
+  // ===== 从后端加载用户列表 =====
+  const loadUsers = useCallback(async () => {
+    try {
+      const res = await authAPI.getUsers()
+      if (res.users) {
+        dispatch({ type: 'LOAD_USERS', payload: res.users })
+      }
+    } catch (err) {
+      console.error('加载用户列表失败:', err)
+    }
+  }, [])
+
+  // ===== 登录 =====
   const login = useCallback(async (username, password) => {
     try {
       const res = await authAPI.login(username, password)
       setToken(res.token)
       setStoredUser(res.user)
       dispatch({ type: 'LOGIN', payload: res.user })
-      // 连接 WebSocket
-      syncClient.connect(res.token, 'default')
-      // 加载项目数据
+      if (stateRef.current.settings?.wsSync !== false) {
+        syncClient.connect(res.token, 'default')
+      }
+      loadUsers()
       await loadProjectData()
       return { success: true, user: res.user }
     } catch (err) {
       return { success: false, error: err.message }
     }
-  }, [])
+  }, [loadUsers])
 
   // ===== 注册 =====
   const register = useCallback(async (username, password, name) => {
@@ -390,11 +539,12 @@ export function AppProvider({ children }) {
       setStoredUser(res.user)
       dispatch({ type: 'LOGIN', payload: res.user })
       syncClient.connect(res.token, 'default')
+      loadUsers()
       return { success: true, user: res.user }
     } catch (err) {
       return { success: false, error: err.message }
     }
-  }, [])
+  }, [loadUsers])
 
   // ===== 登出 =====
   const logout = useCallback(() => {
@@ -407,7 +557,8 @@ export function AppProvider({ children }) {
   // ===== 从后端加载项目数据 =====
   const loadProjectData = useCallback(async () => {
     try {
-      const project = await projectAPI.get('default')
+      const res = await projectAPI.get('default')
+      const project = res.project || res
       if (project && project.mmNodes) {
         dispatch({ type: 'SET_MM_DATA', payload: { nodes: project.mmNodes || [], edges: project.mmEdges || [] } })
         // 恢复样式和标签
@@ -453,26 +604,20 @@ export function AppProvider({ children }) {
       if (syncLockRef.current) return
       syncLockRef.current = true
       try {
-        // 增量合并：远端数据与本地数据合并，远端优先
-        if (data.mmNodes) {
-          const localMap = new Map(state.mmNodes.map(n => [n.id, n]))
-          data.mmNodes.forEach(n => localMap.set(n.id, n))
-          // 如果远端也发了 edges，做增量合并
-          const edges = data.mmEdges || state.mmEdges
-          dispatch({ type: 'SET_MM_DATA', payload: { nodes: [...localMap.values()], edges } })
-        } else if (data.mmEdges) {
-          dispatch({ type: 'SET_MM_DATA', payload: { nodes: state.mmNodes, edges: data.mmEdges } })
-        }
-        if (data.nodeStyles) {
-          Object.entries(data.nodeStyles).forEach(([nodeId, style]) => {
-            Object.entries(style).forEach(([key, value]) => {
-              dispatch({ type: 'UPDATE_NODE_STYLE', payload: { nodeId, styleKey: key, value } })
-            })
-          })
-        }
-        if (data.nodeLabels) {
-          Object.entries(data.nodeLabels).forEach(([nodeId, label]) => {
-            dispatch({ type: 'UPDATE_NODE_LABEL', payload: { nodeId, label } })
+        const currentState = stateRef.current
+        // 计算远端与本地数据的差异
+        const diff = computeSyncDiff(currentState, data)
+        if (diff.hasChanges) {
+          // 有差异，存储待处理更新，由用户选择处理方式
+          dispatch({
+            type: 'SET_PENDING_SYNC',
+            payload: {
+              diff,
+              remoteData: data,
+              localNodes: currentState.mmNodes,
+              localEdges: currentState.mmEdges,
+              timestamp: new Date().toISOString(),
+            }
           })
         }
       } finally {
@@ -495,6 +640,9 @@ export function AppProvider({ children }) {
     syncClient.onDisconnected = () => {
       dispatch({ type: 'SET_SYNC_STATUS', payload: 'offline' })
     }
+    syncClient.onConnecting = () => {
+      dispatch({ type: 'SET_SYNC_STATUS', payload: 'connecting' })
+    }
     // 重连成功后拉取最新数据
     syncClient.onReconnected = () => {
       loadProjectData()
@@ -508,54 +656,106 @@ export function AppProvider({ children }) {
       syncClient.onConnected = null
       syncClient.onDisconnected = null
       syncClient.onReconnected = null
+      syncClient.onConnecting = null
     }
   }, [])
 
-  // ===== 自动登录（token 有效时）=====
+  // ===== 自动登录 =====
   useEffect(() => {
     const storedUser = getStoredUser()
-    const token = localStorage.getItem('sdd_token')
-    if (storedUser && token) {
-      // 验证 token 有效性
+    if (!storedUser) return
+
+    // 确保后端已启动（通过 preview 服务器的管理 API）
+    const ensureBackendRunning = async () => {
+      try {
+        const statusRes = await fetch('/api/manage/backend-status')
+        const status = await statusRes.json()
+        if (status.running) return true
+
+        await fetch('/api/manage/start-backend')
+        for (let i = 0; i < 15; i++) {
+          await new Promise(r => setTimeout(r, 1000))
+          try {
+            const check = await fetch('/api/manage/backend-status')
+            const s = await check.json()
+            if (s.running) return true
+          } catch {}
+        }
+        return false
+      } catch {
+        return false
+      }
+    }
+
+    ensureBackendRunning().then((ok) => {
+      if (!ok) {
+        // 后端启动失败，仍允许本地登录
+        dispatch({ type: 'LOGIN', payload: storedUser })
+        return
+      }
+      const token = localStorage.getItem('sdd_token')
+      if (!token) {
+        dispatch({ type: 'LOGIN', payload: storedUser })
+        return
+      }
       authAPI.me().then((res) => {
         dispatch({ type: 'LOGIN', payload: res.user })
-        syncClient.connect(token, 'default')
+        if (state.settings?.wsSync !== false) {
+          syncClient.connect(token, 'default')
+        }
+        loadUsers()
         loadProjectData()
       }).catch(() => {
-        // token 过期，清除
         clearToken()
         clearStoredUser()
       })
-    }
+    })
   }, [])
 
   // ===== 数据变更时自动保存 + 广播 =====
   useEffect(() => {
     if (!state.isLoggedIn) return
+    if (!state.settings?.wsSync) return
     if (syncLockRef.current) return
 
-    // 保存到服务器
     saveToServer()
-
-    // 广播给其他客户端
     syncClient.broadcastSync({
       mmNodes: state.mmNodes,
       mmEdges: state.mmEdges,
       nodeStyles: state.nodeStyles,
       nodeLabels: state.nodeLabels,
     })
-  }, [state.mmNodes, state.mmEdges, state.nodeStyles, state.nodeLabels, state.isLoggedIn])
+  }, [state.mmNodes, state.mmEdges, state.nodeStyles, state.nodeLabels, state.isLoggedIn, state.settings?.wsSync])
+
+  // ===== 数据变更时自动缓存到本地 localStorage =====
+  useEffect(() => {
+    if (!state.isLoggedIn) return
+    try {
+      localStorage.setItem(MM_DATA_KEY, JSON.stringify({
+        mmNodes: state.mmNodes,
+        mmEdges: state.mmEdges,
+        nodeStyles: state.nodeStyles,
+        nodeLabels: state.nodeLabels,
+        customPositions: state.customPositions,
+        nodeFontStyles: state.nodeFontStyles,
+        cacheTime: new Date().toISOString(),
+      }))
+    } catch (err) {
+      console.error('本地缓存失败:', err)
+    }
+  }, [state.mmNodes, state.mmEdges, state.nodeStyles, state.nodeLabels, state.customPositions, state.nodeFontStyles, state.isLoggedIn])
 
   // ===== 定期从服务器拉取最新数据（每60秒）=====
   useEffect(() => {
     if (!state.isLoggedIn) return
+    if (!state.settings?.wsSync) return
     const timer = setInterval(() => {
       if (!syncLockRef.current) {
         loadProjectData()
       }
     }, 60000)
     return () => clearInterval(timer)
-  }, [state.isLoggedIn])
+  }, [state.isLoggedIn, state.settings?.wsSync])
 
   // ===== 主题 =====
   const toggleDarkMode = useCallback(() => dispatch({ type: 'TOGGLE_DARK_MODE' }), [])
@@ -647,6 +847,221 @@ export function AppProvider({ children }) {
   const openTaskDetail = useCallback((task) => dispatch({ type: 'OPEN_TASK_DETAIL', payload: task }), [])
   const closeTaskDetail = useCallback(() => dispatch({ type: 'CLOSE_TASK_DETAIL' }), [])
 
+  // ===== 同步冲突处理 =====
+  const resolveSync = useCallback((mode) => {
+    const ps = stateRef.current.pendingSync
+    if (!ps) return
+    const currentState = stateRef.current
+    syncLockRef.current = true
+    try {
+      if (mode === 'remote') {
+        // 接受远端：用远端数据替换本地
+        const remote = ps.remoteData
+        if (remote.mmNodes) {
+          const edges = remote.mmEdges || currentState.mmEdges
+          dispatch({ type: 'SET_MM_DATA', payload: { nodes: remote.mmNodes, edges } })
+        } else if (remote.mmEdges) {
+          dispatch({ type: 'SET_MM_DATA', payload: { nodes: currentState.mmNodes, edges: remote.mmEdges } })
+        }
+        if (remote.nodeStyles) {
+          Object.entries(remote.nodeStyles).forEach(([nodeId, style]) => {
+            Object.entries(style).forEach(([key, value]) => {
+              dispatch({ type: 'UPDATE_NODE_STYLE', payload: { nodeId, styleKey: key, value } })
+            })
+          })
+        }
+        if (remote.nodeLabels) {
+          Object.entries(remote.nodeLabels).forEach(([nodeId, label]) => {
+            dispatch({ type: 'UPDATE_NODE_LABEL', payload: { nodeId, label } })
+          })
+        }
+        if (remote.nodeFontStyles) {
+          dispatch({ type: 'SET_NODE_FONT_STYLES', payload: remote.nodeFontStyles })
+        }
+        if (remote.customPositions) {
+          dispatch({ type: 'SET_CUSTOM_POSITIONS', payload: remote.customPositions })
+        }
+      } else if (mode === 'merge') {
+        // 合并：远端新增/修改的合并到本地，本地独有的保留
+        const remote = ps.remoteData
+        if (remote.mmNodes) {
+          const localMap = new Map(currentState.mmNodes.map(n => [n.id, n]))
+          remote.mmNodes.forEach(n => localMap.set(n.id, n))
+          const edges = remote.mmEdges || currentState.mmEdges
+          dispatch({ type: 'SET_MM_DATA', payload: { nodes: [...localMap.values()], edges } })
+        } else if (remote.mmEdges) {
+          dispatch({ type: 'SET_MM_DATA', payload: { nodes: currentState.mmNodes, edges: remote.mmEdges } })
+        }
+        if (remote.nodeStyles) {
+          Object.entries(remote.nodeStyles).forEach(([nodeId, style]) => {
+            Object.entries(style).forEach(([key, value]) => {
+              dispatch({ type: 'UPDATE_NODE_STYLE', payload: { nodeId, styleKey: key, value } })
+            })
+          })
+        }
+        if (remote.nodeLabels) {
+          Object.entries(remote.nodeLabels).forEach(([nodeId, label]) => {
+            dispatch({ type: 'UPDATE_NODE_LABEL', payload: { nodeId, label } })
+          })
+        }
+        if (remote.nodeFontStyles) {
+          dispatch({ type: 'SET_NODE_FONT_STYLES', payload: { ...currentState.nodeFontStyles, ...remote.nodeFontStyles } })
+        }
+        if (remote.customPositions) {
+          dispatch({ type: 'SET_CUSTOM_POSITIONS', payload: { ...currentState.customPositions, ...remote.customPositions } })
+        }
+      }
+      // mode === 'local' => 什么都不做，保留本地数据
+
+      // Gist 来源：更新 settings 和同步时间
+      if (ps.source === 'gist' && mode !== 'local') {
+        const remote = ps.remoteData
+        if (remote.settings) {
+          const safeRemoteSettings = { ...remote.settings }
+          delete safeRemoteSettings.gistToken
+          dispatch({ type: 'UPDATE_SETTINGS', payload: safeRemoteSettings })
+        }
+        const now = new Date().toISOString()
+        localStorage.setItem('sdd_gist_last_sync', now)
+        dispatch({ type: 'SET_GIST_LAST_SYNC', payload: now })
+      }
+
+      dispatch({ type: 'CLEAR_PENDING_SYNC' })
+    } finally {
+      setTimeout(() => { syncLockRef.current = false }, 500)
+    }
+  }, [])
+
+  // ===== Gist 同步 =====
+  const gistPush = useCallback(async () => {
+    const currentState = stateRef.current
+    const token = currentState.settings?.gistToken
+    if (!token) return { success: false, error: '未配置 Token' }
+
+    dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'pushing' })
+    try {
+      // 推送时过滤掉敏感字段 gistToken，防止 GitHub 扫描到并吊销
+      const safeSettings = { ...currentState.settings }
+      delete safeSettings.gistToken
+
+      const result = await pushToGist(token, {
+        mmNodes: currentState.mmNodes,
+        mmEdges: currentState.mmEdges,
+        nodeStyles: currentState.nodeStyles,
+        nodeLabels: currentState.nodeLabels,
+        nodeFontStyles: currentState.nodeFontStyles,
+        customPositions: currentState.customPositions,
+        settings: safeSettings,
+        pushedBy: currentState.currentUser?.name || 'unknown',
+      })
+      if (result.success) {
+        const now = new Date().toISOString()
+        localStorage.setItem('sdd_gist_last_sync', now)
+        dispatch({ type: 'SET_GIST_LAST_SYNC', payload: now })
+        dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'idle' })
+      } else {
+        dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'error' })
+      }
+      return result
+    } catch (err) {
+      dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'error' })
+      return { success: false, error: err.message }
+    }
+  }, [])
+
+  const gistPull = useCallback(async () => {
+    const currentState = stateRef.current
+    const token = currentState.settings?.gistToken
+    if (!token) return { success: false, error: '未配置 Token' }
+
+    dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'pulling' })
+    try {
+      const result = await pullFromGist(token)
+      if (result.success && result.data) {
+        const data = result.data
+
+        // 计算本地与远端数据差异
+        const diff = computeSyncDiff(currentState, data)
+
+        if (diff.hasChanges) {
+          // 有差异：存入 pendingSync，触发对比弹窗，不直接覆盖
+          dispatch({
+            type: 'SET_PENDING_SYNC',
+            payload: {
+              diff,
+              remoteData: data,
+              localNodes: currentState.mmNodes,
+              localEdges: currentState.mmEdges,
+              timestamp: new Date().toISOString(),
+              source: 'gist',
+            }
+          })
+          dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'idle' })
+          return { success: true, hasChanges: true, diff }
+        }
+
+        // 无差异：仅更新 settings 和同步时间
+        // 拉取到的 settings 不应覆盖本地 gistToken
+        if (data.settings) {
+          const safeRemoteSettings = { ...data.settings }
+          delete safeRemoteSettings.gistToken
+          dispatch({ type: 'UPDATE_SETTINGS', payload: safeRemoteSettings })
+        }
+        const now = new Date().toISOString()
+        localStorage.setItem('sdd_gist_last_sync', now)
+        dispatch({ type: 'SET_GIST_LAST_SYNC', payload: now })
+        dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'idle' })
+        return { success: true, hasChanges: false }
+      } else {
+        dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'error' })
+      }
+      return result
+    } catch (err) {
+      dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'error' })
+      return { success: false, error: err.message }
+    }
+  }, [])
+
+  // Gist 自动同步：数据变更时防抖推送
+  const gistAutoTimerRef = useRef(null)
+  useEffect(() => {
+    if (!state.isLoggedIn) return
+    if (!state.settings?.gistSync || !state.settings?.gistToken) return
+    if (state.gistSyncStatus === 'pushing' || state.gistSyncStatus === 'pulling') return
+
+    if (gistAutoTimerRef.current) clearTimeout(gistAutoTimerRef.current)
+    gistAutoTimerRef.current = setTimeout(() => {
+      gistPush()
+    }, 30000) // 数据变更后 30 秒自动推送，避免频繁请求 GitHub API
+
+    return () => {
+      if (gistAutoTimerRef.current) clearTimeout(gistAutoTimerRef.current)
+    }
+  }, [state.mmNodes, state.mmEdges, state.nodeStyles, state.nodeLabels, state.nodeFontStyles, state.customPositions, state.isLoggedIn, state.settings?.gistSync, state.settings?.gistToken])
+
+  // 启动时从 Gist 拉取
+  useEffect(() => {
+    if (!state.isLoggedIn) return
+    if (!state.settings?.gistSync || !state.settings?.gistToken) return
+    // 延迟拉取，等本地数据加载完
+    const timer = setTimeout(() => {
+      gistPull()
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [state.isLoggedIn, state.settings?.gistSync, state.settings?.gistToken])
+
+  // 定时自动拉取（每 5 分钟检查云端更新，独立模式下）
+  useEffect(() => {
+    if (!state.isLoggedIn) return
+    if (!state.settings?.gistSync || !state.settings?.gistToken) return
+    const interval = setInterval(() => {
+      // 有未处理的对比弹窗时跳过，避免覆盖
+      if (stateRef.current.pendingSync) return
+      gistPull()
+    }, 5 * 60 * 1000) // 5 分钟
+    return () => clearInterval(interval)
+  }, [state.isLoggedIn, state.settings?.gistSync, state.settings?.gistToken, gistPull])
+
   // ===== 计算属性（从思维导图数据派生）=====
   const projectInfo = useMemo(() => ({
     id: 'PROJECT-001',
@@ -689,7 +1104,7 @@ export function AppProvider({ children }) {
   const value = {
     state, dispatch,
     // 系统
-    loginUsers, login, register, logout, roles, teamMembers: state.teamMembers,
+    users: state.users, login, register, logout, roles, teamMembers: state.teamMembers, loadUsers,
     addTeamMember: (m) => dispatch({ type: 'ADD_TEAM_MEMBER', payload: m }),
     updateTeamMember: (id, updates) => dispatch({ type: 'UPDATE_TEAM_MEMBER', payload: { id, ...updates } }),
     deleteTeamMember: (id) => dispatch({ type: 'DELETE_TEAM_MEMBER', payload: id }),
@@ -713,7 +1128,11 @@ export function AppProvider({ children }) {
     // 弹窗
     openTaskDetail, closeTaskDetail,
     // 同步
-    syncClient, saveToServer, loadProjectData,
+    syncClient, saveToServer, loadProjectData, resolveSync,
+    showSyncNotif: () => dispatch({ type: 'SHOW_SYNC_NOTIF' }),
+    hideSyncNotif: () => dispatch({ type: 'HIDE_SYNC_NOTIF' }),
+    // Gist 同步
+    gistPush, gistPull,
     // 设置
     updateSettings: (payload) => dispatch({ type: 'UPDATE_SETTINGS', payload }),
   }

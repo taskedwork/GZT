@@ -5,10 +5,12 @@ const path = require('path');
 const { readJSON, writeJSON, initFile } = require('./utils/store');
 const { hashPassword } = require('./utils/helpers');
 const { initWebSocket } = require('./websocket');
+const { initLanDiscovery, getLanDevices, getLanDeviceCount } = require('./lanDiscovery');
 
 // 路由模块
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
+const adminRoutes = require('./routes/admin');
 
 // 数据文件路径
 const DATA_DIR = path.join(__dirname, 'data');
@@ -107,10 +109,23 @@ if (process.env.NODE_ENV !== 'production') {
 // 注册路由
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/admin', adminRoutes);
+
+// 服务后台管理静态页面
+app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
 
 // 健康检查接口
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// 局域网设备检测接口
+app.get('/api/sync/lan-devices', (req, res) => {
+  res.json({
+    devices: getLanDevices(),
+    count: getLanDeviceCount(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // 生产模式：服务前端构建产物
@@ -124,6 +139,11 @@ if (process.env.NODE_ENV === 'production') {
     }
   });
 }
+
+// 后台管理 SPA 路由回退
+app.get('/admin/*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
 
 // 全局错误处理
 app.use((err, req, res, next) => {
@@ -147,11 +167,12 @@ async function start() {
     await hashPlaceholderPasswords();
 
     // 启动监听
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`\n🚀 SDD 服务器已启动`);
       console.log(`   HTTP:  http://localhost:${PORT}`);
       console.log(`   WS:    ws://localhost:${PORT}/ws`);
       console.log(`   API:   http://localhost:${PORT}/api`);
+      console.log(`   后台管理: http://localhost:${PORT}/admin`);
       console.log(`   健康检查: http://localhost:${PORT}/api/health\n`);
     });
   } catch (err) {

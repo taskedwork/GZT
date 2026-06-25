@@ -1,13 +1,14 @@
 /**
  * WebSocket 实时同步层
  *
- * 生产模式：同源 ws(s) 连接
- * 开发模式：ws://localhost:3001
+ * 本地 preview：ws://localhost:5173/ws（通过 vite proxy 转发）
+ * GitHub Pages / 本地 dev：ws://localhost:3001/ws（直连本地后端）
  */
 
-const WS_URL = import.meta.env.PROD
-  ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
-  : 'ws://localhost:3001'
+const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
+const WS_URL = isLocalPreview
+  ? `ws://${window.location.host}/ws`
+  : 'ws://localhost:3001/ws'
 
 class SyncClient {
   constructor() {
@@ -31,6 +32,7 @@ class SyncClient {
     this.onConnected = null   // () => {}      连接成功
     this.onDisconnected = null// () => {}      断开连接
     this.onReconnected = null // () => {}      重连成功（需要拉取最新数据）
+    this.onConnecting = null  // () => {}      开始连接
   }
 
   // 连接 WebSocket
@@ -41,6 +43,9 @@ class SyncClient {
     if (this.ws) {
       this.ws.close()
     }
+
+    // 通知开始连接（更新 UI 为"连接中"）
+    if (this.onConnecting) this.onConnecting()
 
     try {
       this.ws = new WebSocket(`${WS_URL}?token=${token}&projectId=${projectId}`)

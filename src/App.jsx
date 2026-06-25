@@ -21,6 +21,7 @@ import TaskDetailModal from './components/TaskDetailModal'
 import LoginPage from './components/LoginPage'
 import TeamManagement from './components/TeamManagement'
 import Settings from './components/Settings'
+import About from './components/About'
 
 // ===== 主题效果 =====
 function ThemeEffect() {
@@ -52,6 +53,8 @@ function Views() {
       return <TeamManagement />
     case 'settings':
       return <Settings />
+    case 'about':
+      return <About />
     case 'mindmap':
       return <MindMap />
     default:

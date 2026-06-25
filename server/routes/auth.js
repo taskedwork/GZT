@@ -7,6 +7,41 @@ const { generateId, hashPassword, comparePassword, generateToken } = require('..
 // 数据文件路径
 const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
 
+// 角色映射
+const ROLE_MAP = {
+  manager: { roleLabel: '管理员', group: '伙伴' },
+  partner: { roleLabel: '伙伴', group: '伙伴' },
+  outsider: { roleLabel: '外包单位', group: '外包单位' },
+  member: { roleLabel: '成员', group: '伙伴' },
+};
+
+/**
+ * GET /api/auth/users - 获取可登录用户列表（公开接口，不含密码）
+ * 响应: { users: [{ id, username, name, systemRole, avatar, roleLabel, group }] }
+ */
+router.get('/users', (req, res) => {
+  try {
+    const users = readJSON(USERS_FILE) || [];
+    const list = users.map(u => {
+      const roleInfo = ROLE_MAP[u.systemRole] || { roleLabel: u.systemRole, group: '其他' };
+      return {
+        id: u.id,
+        username: u.username,
+        name: u.name,
+        systemRole: u.systemRole,
+        avatar: u.avatar || '🧑',
+        role: u.systemRole,
+        roleLabel: roleInfo.roleLabel,
+        group: roleInfo.group,
+      };
+    });
+    res.json({ users: list });
+  } catch (err) {
+    console.error('获取用户列表失败:', err);
+    res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
 /**
  * POST /api/auth/login - 用户登录
  * 请求体: { username, password }

@@ -1,39 +1,45 @@
 /**
- * 登录页面 - 固定用户选择 + 后端 API 认证
- * 多用户 + 数据持久化 + 实时同步
+ * 登录页面 - 从后端获取用户列表 + API 认证
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useApp } from '../data/store'
 
-// 固定用户列表
-const fixedUsers = [
-  { id: 'admin', username: 'admin', label: '深东 (管理员)', avatar: '👑', password: '123456' },
-  { id: 'member1', username: 'member1', label: '东哥哥 (伙伴)', avatar: '🤝', password: '123456' },
-  { id: 'member2', username: 'member2', label: '老蔡 (伙伴)', avatar: '🤝', password: '123456' },
-  { id: 'member3', username: 'member3', label: '小北哥 (伙伴)', avatar: '🤝', password: '123456' },
-  { id: 'member4', username: 'member4', label: '孙博文 (伙伴)', avatar: '🤝', password: '123456' },
-  { id: 'member5', username: 'member5', label: '财务王姐 (伙伴)', avatar: '🤝', password: '123456' },
-  { id: 'outsource1', username: 'outsource1', label: '灯光 (外包单位)', avatar: '👁', password: '123456' },
-  { id: 'outsource2', username: 'outsource2', label: '施工图 (外包单位)', avatar: '👁', password: '123456' },
-  { id: 'outsource3', username: 'outsource3', label: '其他 (外包单位)', avatar: '👁', password: '123456' },
-]
+const roleLabel = { manager: '管理员', partner: '伙伴', outsider: '外包单位', member: '成员' }
 
 export default function LoginPage() {
-  const { login } = useApp()
+  const { login, state } = useApp()
   const [selectedUser, setSelectedUser] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [users, setUsers] = useState([])
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  // 从后端加载用户列表
+  useEffect(() => {
+    const isLocalPreview = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.PROD
+    const API_BASE = isLocalPreview ? '/api' : 'http://localhost:3001/api'
+    fetch(`${API_BASE}/auth/users`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.users && data.users.length > 0) {
+          setUsers(data.users)
+        } else {
+          setLoadFailed(true)
+        }
+      })
+      .catch(() => setLoadFailed(true))
+  }, [])
 
   async function handleLogin() {
     if (!selectedUser) { setError('请选择身份'); return }
-    const user = fixedUsers.find(u => u.id === selectedUser)
+    const user = users.find(u => u.id === selectedUser || u.username === selectedUser)
     if (!user) { setError('用户不存在'); return }
     setLoading(true)
     setError('')
     try {
-      const result = await login(user.username, password || user.password)
+      const result = await login(user.username, password || '123456')
       if (!result.success) {
         setError(result.error || '登录失败')
       }
@@ -58,10 +64,11 @@ export default function LoginPage() {
           <label>选择身份</label>
           <select value={selectedUser} onChange={e => { setSelectedUser(e.target.value); setError('') }}>
             <option value="">-- 请选择 --</option>
-            {fixedUsers.map(u => (
-              <option key={u.id} value={u.id}>{u.avatar} {u.label}</option>
+            {users.map(u => (
+              <option key={u.id} value={u.id}>{u.name} ({roleLabel[u.systemRole] || u.systemRole})</option>
             ))}
           </select>
+          {loadFailed && <div style={{ fontSize: '.65rem', color: 'var(--danger)', marginTop: 4 }}>无法连接服务器，请检查后端是否启动</div>}
         </div>
 
         <div className="fld">

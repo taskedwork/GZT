@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SDD 后台管理</title>
+  <style>
+    :root {
+      --bg: #0f0f14;
+      --card: #1a1a24;
+      --border: #2a2a3a;
+      --text: #e0e0e0;
+      --muted: #777;
+      --accent: #6c5ce7;
+      --accent-hover: #7c6cf0;
+      --success: #34d399;
+      --danger: #f87171;
+      --warning: #fbbf24;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { margin: 0; font-size: 1.1rem; }
+    header .user { color: var(--muted); font-size: .85rem; }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+      font-size: .85rem;
+      transition: .2s;
+    }
+    .tab:hover { background: rgba(255,255,255,.05); }
+    .tab.active { background: var(--accent); border-color: var(--accent); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 { margin: 0 0 16px; font-size: 1rem; color: var(--text); }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .stat-box {
+      background: rgba(255,255,255,.03);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-box .num { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+    .stat-box .label { font-size: .78rem; color: var(--muted); margin-top: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .85rem;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--muted); font-weight: 500; }
+    .role {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: .75rem;
+      background: rgba(255,255,255,.08);
+    }
+    .role.manager { background: rgba(251, 146, 60, .2); color: #fb923c; }
+    .role.partner { background: rgba(96, 165, 250, .2); color: #60a5fa; }
+    .role.outsider { background: rgba(119, 119, 119, .2); color: #aaa; }
+    .btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: .78rem;
+      margin-right: 6px;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { opacity: .9; }
+    .btn-sm { padding: 4px 8px; font-size: .72rem; }
+    .input {
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      min-width: 120px;
+    }
+    .form-row { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      z-index: 100;
+      display: none;
+    }
+    .toast.show { display: block; }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--danger); }
+    .empty { color: var(--muted); text-align: center; padding: 30px; }
+    .login-box {
+      max-width: 360px;
+      margin: 80px auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px;
+    }
+    .login-box h2 { margin-top: 0; }
+    .login-box .input { width: 100%; margin-bottom: 12px; }
+    .login-box .btn { width: 100%; padding: 10px; }
+  </style>
+</head>
+<body>
+  <div id="loginPage" class="login-box">
+    <h2>SDD 后台管理登录</h2>
+    <input id="loginUser" class="input" placeholder="用户名" value="admin" />
+    <input id="loginPass" class="input" type="password" placeholder="密码" value="123456" />
+    <button class="btn btn-primary" onclick="doLogin()">登录</button>
+  </div>
+
+  <div id="adminPage" style="display:none">
+    <header>
+      <h1>SDD 后台管理</h1>
+      <div class="user" id="currentUser">未登录</div>
+    </header>
+    <div class="container">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('overview')">总览</button>
+        <button class="tab" onclick="switchTab('users')">用户管理</button>
+        <button class="tab" onclick="switchTab('projects')">项目管理</button>
+      </div>
+
+      <div id="overview" class="panel active">
+        <div class="card">
+          <h2>系统状态</h2>
+          <div class="stat-grid">
+            <div class="stat-box"><div class="num" id="statUsers">-</div><div class="label">用户总数</div></div>
+            <div class="stat-box"><div class="num" id="statProjects">-</div><div class="label">项目总数</div></div>
+            <div class="stat-box"><div class="num" id="statNodes">-</div><div class="label">节点总数</div></div>
+            <div class="stat-box"><div class="num" id="statWs">-</div><div class="label">WebSocket 在线</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>API 健康检查</h2>
+          <p id="healthStatus" style="color:var(--muted)">检查中...</p>
+        </div>
+      </div>
+
+      <div id="users" class="panel">
+        <div class="card">
+          <h2>用户列表</h2>
+          <div class="form-row">
+            <input id="newUsername" class="input" placeholder="用户名" />
+            <input id="newName" class="input" placeholder="昵称" />
+            <input id="newPassword" class="input" type="password" placeholder="密码" />
+            <select id="newRole" class="input">
+              <option value="partner">伙伴</option>
+              <option value="outsider">外包单位</option>
+              <option value="manager">管理员</option>
+            </select>
+            <button class="btn btn-primary" onclick="createUser()">创建用户</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>用户名</th><th>昵称</th><th>角色</th><th>创建时间</th><th>操作</th></tr>
+            </thead>
+            <tbody id="userTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="projects" class="panel">
+        <div class="card">
+          <h2>项目列表</h2>
+          <div class="form-row">
+            <input id="newProjectName" class="input" placeholder="项目名称" />
+            <button class="btn btn-primary" onclick="createProject()">创建项目</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>名称</th><th>节点数</th><th>更新时间</th><th>操作</th></tr>
+            </thead>
+            <tbody id="projectTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api';
+    let token = localStorage.getItem('sdd_admin_token') || '';
+
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show ' + type;
+      setTimeout(() => t.className = 'toast', 3000);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(API_BASE + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          ...opts.headers,
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '请求失败 ' + res.status);
+      return data;
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('loginUser').value;
+      const password = document.getElementById('loginPass').value;
+      try {
+        const res = await fetch(API_BASE + '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        token = data.token;
+        localStorage.setItem('sdd_admin_token', token);
+        if (data.user.systemRole !== 'manager') {
+          showToast('仅管理员可访问后台', 'error');
+          token = '';
+          localStorage.removeItem('sdd_admin_token');
+          return;
+        }
+        enterAdmin(data.user);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function enterAdmin(user) {
+      document.getElementById('loginPage').style.display = 'none';
+      document.getElementById('adminPage').style.display = 'block';
+      document.getElementById('currentUser').textContent = `${user.name} (${user.username})`;
+      loadOverview();
+      loadUsers();
+      loadProjects();
+      checkHealth();
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById(name).classList.add('active');
+      if (name === 'overview') loadOverview();
+      if (name === 'users') loadUsers();
+      if (name === 'projects') loadProjects();
+    }
+
+    async function loadOverview() {
+      try {
+        const [users, projects, health] = await Promise.all([
+          api('/admin/users'),
+          api('/admin/projects'),
+          fetch(API_BASE + '/health').then(r => r.json()).catch(() => ({ status: 'error' })),
+        ]);
+        document.getElementById('statUsers').textContent = users.users.length;
+        document.getElementById('statProjects').textContent = projects.projects.length;
+        const nodeCount = projects.projects.reduce((sum, p) => sum + (p.nodeCount || 0), 0);
+        document.getElementById('statNodes').textContent = nodeCount;
+        document.getElementById('statWs').textContent = health.wsOnline || '-';
+        document.getElementById('healthStatus').textContent = 'API 状态: ' + (health.status || 'unknown');
+        document.getElementById('healthStatus').style.color = health.status === 'ok' ? 'var(--success)' : 'var(--danger)';
+      } catch (err) {
+        showToast('加载总览失败: ' + err.message, 'error');
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const data = await api('/admin/users');
+        const tbody = document.getElementById('userTable');
+        if (!data.users.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无用户</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.users.map(u => `
+          <tr>
+            <td>${u.id}</td>
+            <td>${u.username}</td>
+            <td>${u.name}</td>
+            <td><span class="role ${u.systemRole}">${roleLabel(u.systemRole)}</span></td>
+            <td>${new Date(u.createdAt).toLocaleString('zh-CN')}</td>
+            <td>
+              <button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}', '${u.username}')">删除</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        showToast('加载用户失败: ' + err.message, 'error');
+      }
+    }
+
+    function roleLabel(role) {
+      return { manager: '管理员', partner: '伙伴', outsider: '外包单位', member: '成员' }[role] || role;
+    }
+
+    async function createUser() {
+      const username = document.getElementById('newUsername').value;
+      const name = document.getElementById('newName').value;
+      const password = document.getElementById('newPassword').value;
+      const systemRole = document.getElementById('newRole').value;
+      if (!username || !password) return showToast('用户名和密码不能为空', 'error');
+      try {
+        await api('/admin/users', {
+          method: 'POST',
+          body: JSON.stringify({ username, name: name || username, password, systemRole }),
+        });
+        showToast('用户创建成功');
+        document.getElementById('newUsername').value = '';
+        document.getElementById('newName').value = '';
+        document.getElementById('newPassword').value = '';
+        loadUsers();
+        loadOverview();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function deleteUser(id, username) {
+      if (!confirm(`确定删除用户 ${username} 吗？`)) return;
+      try {
+        await api('/admin/users/' + id, { method: 'DELETE' });
+        showToast('用户已删除');
+        loadUsers();
+        loadOverview();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function loadProjects() {
+      try {
+        const data = await api('/admin/projects');
+        const tbody = document.getElementById('projectTable');
+        if (!data.projects.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无项目</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.projects.map(p => `
+          <tr>
+            <td>${p.id}</td>
+            <td>${p.name}</td>
+            <td>${p.nodeCount || 0}</td>
+            <td>${new Date(p.updatedAt).toLocaleString('zh-CN')}</td>
+            <td>
+              <button class="btn btn-sm btn-danger" ${p.id === 'default' ? 'disabled' : ''} onclick="deleteProject('${p.id}', '${p.name}')">删除</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        showToast('加载项目失败: ' + err.message, 'error');
+      }
+    }
+
+    async function createProject() {
+      const name = document.getElementById('newProjectName').value;
+      if (!name) return showToast('项目名称不能为空', 'error');
+      try {
+        await api('/admin/projects', { method: 'POST', body: JSON.stringify({ name }) });
+        showToast('项目创建成功');
+        document.getElementById('newProjectName').value = '';
+        loadProjects();
+        loadOverview();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function deleteProject(id, name) {
+      if (!confirm(`确定删除项目 ${name} 吗？数据不可恢复。`)) return;
+      try {
+        await api('/admin/projects/' + id, { method: 'DELETE' });
+        showToast('项目已删除');
+        loadProjects();
+        loadOverview();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function checkHealth() {
+      try {
+        const health = await fetch(API_BASE + '/health').then(r => r.json());
+        document.getElementById('healthStatus').textContent = 'API 状态: ' + health.status;
+        document.getElementById('healthStatus').style.color = health.status === 'ok' ? 'var(--success)' : 'var(--danger)';
+      } catch {}
+    }
+
+    // 自动登录（Token 有效时）
+    if (token) {
+      api('/auth/me').then(res => {
+        if (res.user.systemRole === 'manager') enterAdmin(res.user);
+        else {
+          token = '';
+          localStorage.removeItem('sdd_admin_token');
+        }
+      }).catch(() => {
+        token = '';
+        localStorage.removeItem('sdd_admin_token');
+      });
+    }
+  </script>
+</body>
+</html>

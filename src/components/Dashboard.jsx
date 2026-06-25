@@ -8,7 +8,7 @@
  *   - 快捷入口（跳转各视图）
  *   - 最近活动 / 项目动态
  */
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useApp } from '../data/store'
 
 // ===== 快捷入口定义 =====
@@ -20,8 +20,9 @@ const quickEntries = [
 ]
 
 export default function Dashboard() {
-  const { state, progress, projectInfo, setView, teamMembers } = useApp()
+  const { state, progress, projectInfo, setView, teamMembers, showSyncNotif } = useApp()
   const isEmpty = state.mmNodes.length === 0
+  const [teamCollapsed, setTeamCollapsed] = useState(false)
 
   // 计算今日日期
   const today = useMemo(() => {
@@ -66,7 +67,9 @@ export default function Dashboard() {
   }, [state.mmNodes])
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className="dashboard-root">
+      {/* 云端更新提示横幅已移至 Layout.jsx 全局显示 */}
+
       {/* ===== 欢迎横幅 ===== */}
       <div className="dashboard-banner">
         <div className="banner-content">
@@ -196,23 +199,25 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* 团队小伙伴 */}
+          {/* 团队小伙伴（可收起） */}
           <div className="dashboard-card">
-            <div className="dashboard-card-header">
+            <div className="dashboard-card-header" style={{ cursor: 'pointer' }} onClick={() => setTeamCollapsed(!teamCollapsed)}>
               <h4>团队小伙伴</h4>
+              <span style={{ fontSize: '.7rem', color: 'var(--muted)' }}>{teamCollapsed ? '展开 ▾' : '收起 ▴'}</span>
             </div>
-            <div className="team-list">
-              {(teamMembers || []).map(m => (
-                <div key={m.id} className="team-member-item">
-                  <div className="team-member-avatar">{m.name[0]}</div>
-                  <div className="team-member-info">
-                    <div className="team-member-name">{m.name}</div>
-                    <div className="team-member-role">{m.roleLabel}</div>
+            {!teamCollapsed && (
+              <div className="team-list">
+                {(teamMembers || []).map(m => (
+                  <div key={m.id} className="team-member-item">
+                    <div className="team-member-info">
+                      <div className="team-member-name">{m.name}</div>
+                      <div className="team-member-role">{m.roleLabel}</div>
+                    </div>
+                    <span className={'role-tag ' + m.role}>{m.roleLabel}</span>
                   </div>
-                  <span className={'role-tag ' + m.role}>{m.roleLabel}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 节点类型分布 */}

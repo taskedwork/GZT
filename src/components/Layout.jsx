@@ -16,6 +16,7 @@
 
 import React, { useState } from 'react'
 import { useApp } from '../data/store'
+import SyncNotification from './SyncNotification'
 
 // ===== 导航定义 =====
 // 工作台为主入口，项目流程管理为子分组
@@ -36,21 +37,52 @@ const manageNavItems = [
 const allNavItems = [mainNav, ...projectNavItems]
 
 export default function Layout({ children }) {
-  const { state, setView, setRole, roles, toggleDarkMode, logout } = useApp()
+  const { state, setView, setRole, roles, toggleDarkMode, logout, showSyncNotif, resolveSync } = useApp()
+  const isStandalone = state.settings?.standalone !== false
   const [focusMode, setFocusMode] = useState(false)
   const [projectExpanded, setProjectExpanded] = useState(true)
   const [manageExpanded, setManageExpanded] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // 同步状态指示
-  const syncColor = state.syncStatus === 'connected' ? '#55efc4' : state.syncStatus === 'connecting' ? '#fdcb6e' : '#e17055'
-  const syncText = state.syncStatus === 'connected' ? '已同步' : state.syncStatus === 'connecting' ? '连接中...' : '离线'
+  const wsEnabled = state.settings?.wsSync !== false
+  const syncColor = !wsEnabled
+    ? '#636e72'  // 未启用 WS：灰色
+    : state.syncStatus === 'connected' ? '#55efc4' : state.syncStatus === 'connecting' ? '#fdcb6e' : '#e17055'
+  const syncText = !wsEnabled
+    ? '未启用同步'
+    : state.syncStatus === 'connected' ? '已同步' : state.syncStatus === 'connecting' ? '连接中...' : '离线'
 
   const currentNav = allNavItems.find(i => i.id === state.activeView) || mainNav
 
+  const handleNav = (id) => {
+    setView(id)
+    setMobileMenuOpen(false)
+  }
+
+  // 移动端底部导航项
+  const mobileNavItems = [
+    mainNav,
+    projectNavItems[0], // 项目总览
+    projectNavItems[2], // 待办看板
+    projectNavItems[3], // 思维导图
+  ]
+
   return (
     <div className={`app-layout ${focusMode ? 'focus-mode' : ''}`}>
+      {/* ===== 移动端汉堡菜单按钮 ===== */}
+      <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(true)} aria-label="菜单">
+        <span /><span /><span />
+      </button>
+
+      {/* ===== 移动端遮罩 ===== */}
+      {mobileMenuOpen && <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)} />}
+
       {/* ===== 侧边栏 ===== */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''}`}>
+        {/* 移动端关闭按钮 */}
+        <button className="sidebar-close-btn" onClick={() => setMobileMenuOpen(false)} aria-label="关闭菜单">✕</button>
+
         {/* 头部 */}
         <div className="sidebar-header">
           <h1>工作台</h1>
@@ -62,7 +94,7 @@ export default function Layout({ children }) {
           {/* 工作台（主入口） */}
           <a
             className={`nav-item nav-item-main ${state.activeView === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setView('dashboard')}
+            onClick={() => handleNav('dashboard')}
             title={mainNav.desc}
           >
             <span className="icon">{mainNav.icon}</span>
@@ -86,31 +118,25 @@ export default function Layout({ children }) {
             <a
               key={item.id}
               className={`nav-item ${state.activeView === item.id ? 'active' : ''}`}
-              onClick={() => setView(item.id)}
+              onClick={() => handleNav(item.id)}
               title={item.desc}
             >
               <span className="icon">{item.icon}</span>
               <span>{item.label}</span>
-              {state.activeView === item.id && (
+              {state.pendingSync && item.id === 'overview' && (
+                <span
+                  className="nav-update-badge"
+                  title="检测到云端数据更新，点击查看"
+                  onClick={(e) => { e.stopPropagation(); showSyncNotif() }}
+                >
+                  {state.pendingSync.diff.added.length + state.pendingSync.diff.removed.length + state.pendingSync.diff.modified.length}
+                </span>
+              )}
+              {state.activeView === item.id && !state.pendingSync && (
                 <span style={{ marginLeft: 'auto', fontSize: '.55rem', opacity: 0.5 }}>●</span>
               )}
             </a>
           ))}
-        </nav>
-
-        {/* 分隔线 */}
-        <div style={{ margin: '12px 16px', height: 1, background: 'var(--border)' }} />
-
-        {/* 快捷操作 */}
-        <nav className="nav-section" style={{ marginBottom: 0 }}>
-          <div className="nav-label">工具</div>
-          <a
-            className={`nav-item ${focusMode ? 'active-subtle' : ''}`}
-            onClick={() => setFocusMode(!focusMode)}
-          >
-            <span className="icon">{focusMode ? '⊞' : '⊟'}</span>
-            <span>专注模式</span>
-          </a>
         </nav>
 
         {/* ===== 管理（子分组，可折叠）===== */}
@@ -130,7 +156,7 @@ export default function Layout({ children }) {
             <a
               key={item.id}
               className={`nav-item ${state.activeView === item.id ? 'active' : ''}`}
-              onClick={() => setView(item.id)}
+              onClick={() => handleNav(item.id)}
               title={item.desc}
             >
               <span className="icon">{item.icon}</span>
@@ -140,6 +166,24 @@ export default function Layout({ children }) {
               )}
             </a>
           ))}
+        </nav>
+
+        {/* 分隔线 */}
+        <div style={{ margin: '12px 16px', height: 1, background: 'var(--border)' }} />
+
+        {/* ===== 关于（始终可见）===== */}
+        <nav className="nav-section" style={{ marginBottom: 0 }}>
+          <a
+            className={`nav-item ${state.activeView === 'about' ? 'active' : ''}`}
+            onClick={() => handleNav('about')}
+            title="版本信息与许可证"
+          >
+            <span className="icon">ℹ</span>
+            <span>关于</span>
+            {state.activeView === 'about' && (
+              <span style={{ marginLeft: 'auto', fontSize: '.55rem', opacity: 0.5 }}>●</span>
+            )}
+          </a>
         </nav>
 
         {/* ===== 侧边栏底部 ===== */}
@@ -178,7 +222,7 @@ export default function Layout({ children }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, fontSize: '.65rem', color: 'var(--muted)' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: syncColor, display: 'inline-block' }} />
             <span>{syncText}</span>
-            {state.onlineUsers.length > 0 && <span style={{ color: 'var(--accent)' }}>({state.onlineUsers.length}人在线)</span>}
+            {!isStandalone && state.onlineUsers.length > 0 && <span style={{ color: 'var(--accent)' }}>({state.onlineUsers.length}人在线)</span>}
           </div>
 
           {/* 退出登录 */}
@@ -187,6 +231,12 @@ export default function Layout({ children }) {
             onClick={logout}
             style={{ width: '100%', marginTop: 10, justifyContent: 'center' }}
           >退出登录</button>
+
+          {/* 许可证声明 */}
+          <div style={{ marginTop: 10, textAlign: 'center', fontSize: '.55rem', color: 'rgba(255,255,255,.2)', lineHeight: 1.5 }}>
+            SDD工作台 v1.0 · 含开源组件<br />
+            React(MIT) · Express(MIT) · jsMind(BSD-3)
+          </div>
         </div>
       </aside>
 
@@ -207,6 +257,7 @@ export default function Layout({ children }) {
               padding: '4px 12px', background: 'var(--bg)',
               border: '1px solid var(--border)', borderRadius: 20,
               fontSize: '.7rem', color: 'var(--muted)',
+              maxWidth: '40vw', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
             }}>
               <span style={{
                 width: 6, height: 6, borderRadius: '50%',
@@ -214,13 +265,6 @@ export default function Layout({ children }) {
               }} />
               {currentNav.label}
             </div>
-
-            {/* 专注模式 */}
-            <label className="toggle-switch" style={{ fontSize: '.68rem' }}>
-              <input type="checkbox" checked={focusMode} onChange={e => setFocusMode(e.target.checked)} />
-              <span className="toggle-track" />
-              <span>专注</span>
-            </label>
 
             {/* 用户信息 */}
             {state.currentUser && (
@@ -235,14 +279,45 @@ export default function Layout({ children }) {
           </div>
         </header>
 
+        {/* ===== 同步更新通知（弹窗）===== */}
+        <SyncNotification />
+
+        {/* ===== 云端更新提示横幅（所有页面可见）===== */}
+        {state.pendingSync && (
+          <div className="sync-banner" onClick={() => showSyncNotif()}>
+            <span className="sync-banner-icon">↻</span>
+            <span className="sync-banner-text">检测到云端数据有更新，点击查看</span>
+            <span className="sync-banner-arrow">▸</span>
+          </div>
+        )}
+
         {/* ===== 内容区域：children 渲染当前视图 ===== */}
-        <div className={focusMode ? 'focus-content' : ''} style={{
-          height: 'calc(100vh - 56px)',
-          overflow: 'auto',
-        }}>
+        <div className={`main-scroll-area${focusMode ? ' focus-content' : ''}`}>
           {children}
         </div>
       </main>
+
+      {/* ===== 移动端底部导航栏 ===== */}
+      <nav className="mobile-bottom-nav">
+        {mobileNavItems.map(item => (
+          <a
+            key={item.id}
+            className={`mobile-nav-item ${state.activeView === item.id ? 'active' : ''}`}
+            onClick={() => handleNav(item.id)}
+          >
+            <span className="mobile-nav-icon">{item.icon}</span>
+            <span className="mobile-nav-label">{item.label}</span>
+          </a>
+        ))}
+        {/* 更多菜单 */}
+        <a
+          className={`mobile-nav-item ${mobileMenuOpen ? 'active' : ''}`}
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        >
+          <span className="mobile-nav-icon">☰</span>
+          <span className="mobile-nav-label">更多</span>
+        </a>
+      </nav>
     </div>
   )
 }
