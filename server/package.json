@@ -1,16 +1,38 @@
 {
   "name": "sdd-server",
   "version": "1.0.0",
+  "bin": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "build:win": "pkg . --targets node18-win-x64 --output ../dist/sdd-server.exe --compress GZip",
+    "build:linux": "pkg . --targets node18-linux-x64 --output ../dist/sdd-server-linux --compress GZip",
+    "build:arm": "pkg . --targets node18-linux-arm64 --output ../dist/sdd-server-arm64 --compress GZip",
+    "build:all": "pkg . --targets node18-win-x64,node18-linux-x64,node18-linux-arm64 --output ../dist/sdd-server --compress GZip"
+  },
+  "pkg": {
+    "scripts": [
+      "index.js",
+      "routes/*.js",
+      "utils/*.js",
+      "middleware/*.js",
+      "websocket.js",
+      "lanDiscovery.js",
+      "paths.js"
+    ],
+    "assets": [
+      "public/**/*"
+    ]
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "ws": "^8.16.0",
-    "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "uuid": "^9.0.0"
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.20.0"
   }
 }

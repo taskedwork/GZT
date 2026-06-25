@@ -3,7 +3,7 @@ const { verifyToken } = require('./utils/helpers');
 const path = require('path');
 const { readJSON, writeJSON } = require('./utils/store');
 
-const PROJECTS_FILE = path.join(__dirname, 'data', 'projects.json');
+const { PROJECTS_FILE } = require('./paths');
 
 // 存储所有活跃的 WebSocket 连接
 // Map<connId, { ws, userName, userId, projectId, isAlive }>

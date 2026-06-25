@@ -6,8 +6,7 @@ const { generateId, hashPassword } = require('../utils/helpers');
 const authMiddleware = require('../middleware/auth');
 
 // 数据文件路径
-const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
-const PROJECTS_FILE = path.join(__dirname, '..', 'data', 'projects.json');
+const { USERS_FILE, PROJECTS_FILE } = require('../paths');
 
 // 所有 admin 路由都需要认证
 router.use(authMiddleware);

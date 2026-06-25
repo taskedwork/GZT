@@ -38,11 +38,19 @@ echo "[5/6] 初始化数据..."
 mkdir -p data
 
 # 6. 创建启动脚本和快捷命令
-echo "[6/6] 配置启动脚本..."
+echo "[6/7] 配置启动脚本..."
 
 cat > ~/start-sdd.sh << 'SCRIPT'
 #!/bin/bash
 cd ~/GZT/server
+
+# 检查后端是否已在运行
+if [ -f /tmp/sdd-server.pid ] && kill -0 $(cat /tmp/sdd-server.pid) 2>/dev/null; then
+  echo "SDD 后端已在运行 (PID: $(cat /tmp/sdd-server.pid))"
+  echo "停止服务: kill \$(cat /tmp/sdd-server.pid)"
+  exit 1
+fi
+
 echo ""
 echo "============================================"
 echo "   SDD 后端服务"
@@ -52,6 +60,13 @@ echo "  PWA 地址: https://taskedwork.github.io/GZT/"
 echo "  按 Ctrl+C 停止服务"
 echo "============================================"
 echo ""
+
+# 记录 PID
+echo $$ > /tmp/sdd-server.pid
+
+# 退出时清理 PID
+trap "rm -f /tmp/sdd-server.pid; exit" INT TERM EXIT
+
 node index.js
 SCRIPT
 chmod +x ~/start-sdd.sh
@@ -60,6 +75,17 @@ chmod +x ~/start-sdd.sh
 if ! grep -q "alias sdd=" ~/.bashrc 2>/dev/null; then
   echo 'alias sdd="bash ~/start-sdd.sh"' >> ~/.bashrc
 fi
+
+# 7. 配置开机自启（需要 Termux:Boot）
+echo "[7/7] 配置开机自启..."
+mkdir -p ~/.termux/boot
+cat > ~/.termux/boot/start-sdd << 'BOOT'
+#!/bin/bash
+termux-wake-lock
+sleep 5
+bash ~/start-sdd.sh &
+BOOT
+chmod +x ~/.termux/boot/start-sdd
 
 echo ""
 echo "============================================"
@@ -71,5 +97,8 @@ echo "  或运行:    bash ~/start-sdd.sh"
 echo ""
 echo "  然后用浏览器打开:"
 echo "  https://taskedwork.github.io/GZT/"
+echo ""
+echo "  开机自启:  安装 Termux:Boot (F-Droid)"
+echo "  已自动配置开机启动后端"
 echo ""
 echo "============================================"

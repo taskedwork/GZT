@@ -5,7 +5,7 @@ const { readJSON, writeJSON } = require('../utils/store');
 const { generateId, hashPassword, comparePassword, generateToken } = require('../utils/helpers');
 
 // 数据文件路径
-const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
+const { USERS_FILE } = require('../paths');
 
 // 角色映射
 const ROLE_MAP = {

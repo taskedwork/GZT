@@ -6,7 +6,7 @@ const { generateId } = require('../utils/helpers');
 const authMiddleware = require('../middleware/auth');
 
 // 数据文件路径
-const PROJECTS_FILE = path.join(__dirname, '..', 'data', 'projects.json');
+const { PROJECTS_FILE } = require('../paths');
 
 // 所有项目路由都需要认证
 router.use(authMiddleware);

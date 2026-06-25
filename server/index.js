@@ -6,16 +6,12 @@ const { readJSON, writeJSON, initFile } = require('./utils/store');
 const { hashPassword } = require('./utils/helpers');
 const { initWebSocket } = require('./websocket');
 const { initLanDiscovery, getLanDevices, getLanDeviceCount } = require('./lanDiscovery');
+const { DATA_DIR, USERS_FILE, PROJECTS_FILE, PUBLIC_DIR, DIST_DIR, isPackaged } = require('./paths');
 
 // 路由模块
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
 const adminRoutes = require('./routes/admin');
-
-// 数据文件路径
-const DATA_DIR = path.join(__dirname, 'data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 
 // 默认数据
 const DEFAULT_USERS = [
@@ -125,7 +121,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/admin', adminRoutes);
 
 // 服务后台管理静态页面
-app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
+app.use('/admin', express.static(path.join(PUBLIC_DIR, 'admin')));
 
 // 健康检查接口
 app.get('/api/health', (req, res) => {
@@ -141,21 +137,20 @@ app.get('/api/sync/lan-devices', (req, res) => {
   });
 });
 
-// 生产模式：服务前端构建产物
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '..', 'dist');
-  app.use(express.static(distPath));
+// 生产模式：服务前端构建产物（仅开发环境，pkg 打包后前端在 GitHub Pages）
+if (process.env.NODE_ENV === 'production' && DIST_DIR) {
+  app.use(express.static(DIST_DIR));
   // SPA 路由回退
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api') && !req.path.startsWith('/ws')) {
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.sendFile(path.join(DIST_DIR, 'index.html'));
     }
   });
 }
 
 // 后台管理 SPA 路由回退
 app.get('/admin/*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html'));
 });
 
 // 全局错误处理
@@ -181,12 +176,17 @@ async function start() {
 
     // 启动监听
     server.listen(PORT, '0.0.0.0', () => {
-      console.log(`\n🚀 SDD 服务器已启动`);
-      console.log(`   HTTP:  http://localhost:${PORT}`);
-      console.log(`   WS:    ws://localhost:${PORT}/ws`);
-      console.log(`   API:   http://localhost:${PORT}/api`);
-      console.log(`   后台管理: http://localhost:${PORT}/admin`);
-      console.log(`   健康检查: http://localhost:${PORT}/api/health\n`);
+      console.log(`\n============================================`);
+      console.log(`  SDD 后端服务已启动 ${isPackaged ? '(独立运行模式)' : ''}`);
+      console.log(`============================================`);
+      console.log(`  HTTP:  http://localhost:${PORT}`);
+      console.log(`  WS:    ws://localhost:${PORT}/ws`);
+      console.log(`  API:   http://localhost:${PORT}/api`);
+      console.log(`  后台管理: http://localhost:${PORT}/admin`);
+      console.log(`  健康检查: http://localhost:${PORT}/api/health`);
+      console.log(`  数据目录: ${DATA_DIR}`);
+      console.log(`  PWA 地址: https://taskedwork.github.io/GZT/`);
+      console.log(`============================================\n`);
     });
   } catch (err) {
     console.error('服务器启动失败:', err);
