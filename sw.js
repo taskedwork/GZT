@@ -6,7 +6,7 @@
  * - API/WebSocket: 不缓存，直连后端
  */
 
-const CACHE_NAME = 'sdd-pwa-v4'
+const CACHE_NAME = 'sdd-pwa-v5'
 const ASSETS = [
   './',
   './index.html',
