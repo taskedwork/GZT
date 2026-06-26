@@ -106,48 +106,27 @@ function roleLabelForRole(role) {
   return role
 }
 
-// 预置成员名单（只含公开信息，密码运行时哈希为默认密码 123456）
-const PRESET_MEMBERS = [
-  { username: 'admin', name: '深东', systemRole: 'manager' },
-  { username: 'dgge', name: '东哥哥', systemRole: 'partner' },
-  { username: 'laocai', name: '老蔡', systemRole: 'partner' },
-  { username: 'xbege', name: '小北哥', systemRole: 'partner' },
-  { username: 'sunbo', name: '孙博文', systemRole: 'partner' },
-  { username: 'wangjie', name: '财务王姐', systemRole: 'partner' },
-  { username: 'dengguang', name: '灯光', systemRole: 'outsider' },
-  { username: 'shigongtu', name: '施工图', systemRole: 'outsider' },
-  { username: 'qita', name: '其他', systemRole: 'outsider' },
-  { username: 'xiaopengyou', name: '小朋友', systemRole: 'partner' },
-]
-
 /**
  * 首次使用时初始化默认用户
- * 创建预置成员名单，密码统一为默认密码 123456（运行时哈希，不存储明文）
- * 如果已有用户但缺少预置成员，自动补充
+ * 只创建一个管理员账号，其他成员通过 Gist 加密同步导入
  */
 export async function initDefaultUsers() {
   const users = await getAllUsers()
-  const existingUsernames = new Set(users.map(u => u.username))
-  const missing = PRESET_MEMBERS.filter(m => !existingUsernames.has(m.username))
-
-  if (users.length > 0 && missing.length === 0) return false
+  if (users.length > 0) return false
 
   const hashed = await hashPassword(DEFAULT_PASSWORD)
   const now = new Date().toISOString()
 
-  const newUsers = missing.map(m => ({
+  const admin = {
     id: generateId(),
-    username: m.username,
+    username: 'admin',
     password: hashed,
-    name: m.name,
-    systemRole: m.systemRole,
-    avatar: avatarForRole(m.systemRole),
+    name: '管理员',
+    systemRole: 'manager',
+    avatar: avatarForRole('manager'),
     createdAt: now,
-  }))
-
-  if (newUsers.length > 0) {
-    await saveAllUsers([...users, ...newUsers])
   }
+  await saveUser(admin)
   return true
 }
 
