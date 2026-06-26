@@ -443,7 +443,7 @@ function appReducer(state, action) {
 //  同步差异计算
 // ============================================================
 function computeSyncDiff(state, remoteData) {
-  const result = { hasChanges: false, added: [], removed: [], modified: [], edgeChanges: [], styleChanges: [] }
+  const result = { hasChanges: false, added: [], removed: [], modified: [], edgeChanges: [], styleChanges: [], userChanges: [] }
 
   const remoteNodes = remoteData.mmNodes || []
   const localMap = new Map(state.mmNodes.map(n => [n.id, n]))
@@ -500,7 +500,28 @@ function computeSyncDiff(state, remoteData) {
     }
   })
 
-  result.hasChanges = result.added.length > 0 || result.removed.length > 0 || result.modified.length > 0 || result.edgeChanges.length > 0 || result.styleChanges.length > 0
+  // 用户列表变化（只比较 id/username/name/systemRole，不比较密码）
+  if (remoteData.users) {
+    const localUsers = (state.users || []).map(u => ({ id: u.id, username: u.username, name: u.name, systemRole: u.systemRole }))
+    const remoteUsers = remoteData.users.map(u => ({ id: u.id, username: u.username, name: u.name, systemRole: u.systemRole }))
+    const localUserMap = new Map(localUsers.map(u => [u.id, u]))
+    const remoteUserMap = new Map(remoteUsers.map(u => [u.id, u]))
+
+    remoteUsers.forEach(u => {
+      if (!localUserMap.has(u.id)) {
+        result.userChanges.push({ type: 'added', name: u.name, username: u.username })
+      } else if (JSON.stringify(localUserMap.get(u.id)) !== JSON.stringify(u)) {
+        result.userChanges.push({ type: 'modified', name: u.name, username: u.username })
+      }
+    })
+    localUsers.forEach(u => {
+      if (!remoteUserMap.has(u.id)) {
+        result.userChanges.push({ type: 'removed', name: u.name, username: u.username })
+      }
+    })
+  }
+
+  result.hasChanges = result.added.length > 0 || result.removed.length > 0 || result.modified.length > 0 || result.edgeChanges.length > 0 || result.styleChanges.length > 0 || result.userChanges.length > 0
   return result
 }
 

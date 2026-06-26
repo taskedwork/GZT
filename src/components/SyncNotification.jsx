@@ -68,7 +68,7 @@ export default function SyncNotification() {
   if (!pending || !state.syncNotifVisible) return null
 
   const { diff } = pending
-  const totalChanges = diff.added.length + diff.removed.length + diff.modified.length + diff.edgeChanges.length
+  const totalChanges = diff.added.length + diff.removed.length + diff.modified.length + diff.edgeChanges.length + (diff.userChanges?.length || 0)
 
   // 按类型统计更新条数
   const getItemType = (item) => item.type || item.changes?.[0]?.remote?.type || 'default'
@@ -117,6 +117,11 @@ export default function SyncNotification() {
         {diff.edgeChanges.length > 0 && (
           <span className="sync-notif-stat sync-notif-stat-edge">
             ↔ 连线变更
+          </span>
+        )}
+        {diff.userChanges?.length > 0 && (
+          <span className="sync-notif-stat sync-notif-stat-other">
+            👥 成员 {diff.userChanges.length} 人更新
           </span>
         )}
         <span className="sync-notif-stat-source">云端</span>
@@ -182,6 +187,12 @@ export default function SyncNotification() {
               {diff.styleChanges?.map((sc, i) => (
                 <div key={`style-${i}`} className="sync-diff-text-line sync-diff-text-style">
                   ~ {KEY_LABELS[sc.key] || sc.key} 有变化
+                </div>
+              ))}
+              {/* 成员变化 */}
+              {diff.userChanges?.map((uc, i) => (
+                <div key={`user-${i}`} className={`sync-diff-text-line ${uc.type === 'added' ? 'sync-diff-text-add' : uc.type === 'removed' ? 'sync-diff-text-remove' : 'sync-diff-text-modify'}`}>
+                  {uc.type === 'added' ? '+' : uc.type === 'removed' ? '−' : '~'} 成员 {uc.name}（{uc.type === 'added' ? '云端新增' : uc.type === 'removed' ? '云端已删除' : '信息变更'}）
                 </div>
               ))}
             </div>

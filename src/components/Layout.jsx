@@ -129,7 +129,7 @@ export default function Layout({ children }) {
                   title="检测到云端数据更新，点击查看"
                   onClick={(e) => { e.stopPropagation(); showSyncNotif() }}
                 >
-                  {state.pendingSync.diff.added.length + state.pendingSync.diff.removed.length + state.pendingSync.diff.modified.length}
+                  {state.pendingSync.diff.added.length + state.pendingSync.diff.removed.length + state.pendingSync.diff.modified.length + (state.pendingSync.diff.userChanges?.length || 0)}
                 </span>
               )}
               {state.activeView === item.id && !state.pendingSync && (
