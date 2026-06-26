@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * 项目总览 v5 - 支持创建项目 & 添加任务 & 数据存储/导出导入
  * 项目 = 根节点，任务 = 子节点
  */
@@ -557,9 +557,9 @@ export default function ProjectOverview() {
         </div>
         {projects.length > 0 && (
           <div className="stats-bar" style={{ marginBottom: 0, gap: 10 }}>
-            <StatCard label="项目/待办" value={`${projects.length}/${state.mmNodes.filter(n => n.type === 'task').length}`} icon="◉" color="#6c5ce7" />
+            <StatCard label="项目/待办" value={`${projects.length}/${state.mmNodes.filter(n => n.type === 'task' && n.status !== 'done').length}`} icon="◉" color="#6c5ce7" />
             <StatCard label={state.currentUser?.systemRole === 'manager' ? '全部待办' : '我的待办'} value={state.mmNodes.filter(n => {
-              if (n.type !== 'task') return false
+              if (n.type !== 'task' || n.status === 'done') return false
               if (state.currentUser?.systemRole === 'manager') return true
               const members = [...new Set([...(n.assignees || []), ...(n.collabMembers || [])])]
               return state.currentUser ? members.includes(state.currentUser.name) : false
@@ -668,7 +668,7 @@ export default function ProjectOverview() {
                       >
                         {project.label || project.name || '未命名项目'}
                       </span>
-                      <span className="task-count">{tasks.length} 个待办</span>
+                      <span className="task-count">{tasks.filter(t => t.status !== 'done').length} 个待办</span>
                       {tasks.length > 0 && (
                         <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                           {[
@@ -1200,7 +1200,7 @@ export default function ProjectOverview() {
                 <h3 style={{ margin: 0, fontSize: '1rem' }}>
                   {isManager ? '全部待办详情' : '我的待办详情'}
                   <span style={{ fontSize: '.72rem', color: 'var(--muted)', marginLeft: 8 }}>
-                    共 {myTasks.length} 项 · 待办 {todoCount} · 进行中 {doingCount} · 已完成 {doneCount}
+                    共 {doingTasks.length} 项 · 待办 {todoCount} · 进行中 {doingCount} · 已完成 {doneCount}
                   </span>
                 </h3>
                 <button className="btn btn-primary" style={{ fontSize: '.72rem', padding: '4px 12px' }} onClick={() => { setMyTasksModal(false); setView('kanban') }}>

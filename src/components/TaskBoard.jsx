@@ -233,7 +233,8 @@ export default function TaskBoard() {
     const total = tasks.length
     const done = tasks.filter(t => t.status === 'done').length
     const doing = tasks.filter(t => t.status === 'doing').length
-    return { total, done, doing, todo: total - done - doing }
+    const todo = tasks.filter(t => t.status === 'todo').length
+    return { total, done, doing, todo, active: total - done }
   }, [tasks])
 
   return (
@@ -243,7 +244,7 @@ export default function TaskBoard() {
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>待办看板</h2>
           <p style={{ fontSize: '.78rem', color: 'var(--muted)', marginTop: 4 }}>
-            四象限优先级 · 拖拽待办卡片切换象限 · 共 {stats.total} 个待办
+            四象限优先级 · 拖拽待办卡片切换象限 · 共 {stats.active} 个待办
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

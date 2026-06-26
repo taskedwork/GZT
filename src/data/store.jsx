@@ -201,7 +201,8 @@ function appReducer(state, action) {
       return { ...state, isLoggedIn: true, currentUser: action.payload }
     }
     case 'LOGOUT':
-      return { ...initialState }
+      // 保留 settings（含 gistToken）和 mmData 本地缓存，仅重置登录与运行时状态
+      return { ...initialState, settings: state.settings, mmNodes: state.mmNodes, mmEdges: state.mmEdges, nodeStyles: state.nodeStyles, nodeLabels: state.nodeLabels, nodeFontStyles: state.nodeFontStyles, customPositions: state.customPositions }
 
     // ===== 同步状态 =====
     case 'SET_SYNC_STATUS':
@@ -1018,7 +1019,7 @@ export function AppProvider({ children }) {
   const closeTaskDetail = useCallback(() => dispatch({ type: 'CLOSE_TASK_DETAIL' }), [])
 
   // ===== 同步冲突处理 =====
-  const resolveSync = useCallback((mode) => {
+  const resolveSync = useCallback(async (mode) => {
     const ps = stateRef.current.pendingSync
     if (!ps) return
     const currentState = stateRef.current
@@ -1093,7 +1094,8 @@ export function AppProvider({ children }) {
         }
         // 纯前端模式：同步用户列表到 IndexedDB
         if (frontendModeRef.current && remote.users) {
-          feReplaceAllUsers(remote.users).then(() => loadUsers())
+          await feReplaceAllUsers(remote.users)
+          loadUsers()
         }
         const now = new Date().toISOString()
         localStorage.setItem('sdd_gist_last_sync', now)
@@ -1157,9 +1159,9 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  const gistPull = useCallback(async () => {
+  const gistPull = useCallback(async (overrideToken) => {
     const currentState = stateRef.current
-    const token = currentState.settings?.gistToken
+    const token = overrideToken || currentState.settings?.gistToken
     if (!token) return { success: false, error: '未配置 Token' }
 
     dispatch({ type: 'SET_GIST_SYNC_STATUS', payload: 'pulling' })

@@ -94,6 +94,7 @@ function generateId() {
 function avatarForRole(role) {
   if (role === 'manager') return '👑'
   if (role === 'outsider') return '👁'
+  if (role === 'tester') return '🔧'
   return '🤝'
 }
 
@@ -103,6 +104,7 @@ function roleLabelForRole(role) {
   if (role === 'partner') return '伙伴'
   if (role === 'outsider') return '外包单位'
   if (role === 'member') return '成员'
+  if (role === 'tester') return '测试'
   return role
 }
 
@@ -117,16 +119,16 @@ export async function initDefaultUsers() {
   const hashed = await hashPassword(DEFAULT_PASSWORD)
   const now = new Date().toISOString()
 
-  const admin = {
+  const testUser = {
     id: generateId(),
-    username: 'admin',
+    username: 'test',
     password: hashed,
-    name: '管理员',
-    systemRole: 'manager',
-    avatar: avatarForRole('manager'),
+    name: '测试',
+    systemRole: 'tester',
+    avatar: avatarForRole('tester'),
     createdAt: now,
   }
-  await saveUser(admin)
+  await saveUser(testUser)
   return true
 }
 

@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../data/store'
 
-const roleLabel = { manager: '管理员', partner: '伙伴', outsider: '外包单位', member: '成员' }
+const roleLabel = { manager: '管理员', partner: '伙伴', outsider: '外包单位', member: '成员', tester: '测试' }
 
 export default function LoginPage() {
   const { login, state, appMode, loadUsers } = useApp()
