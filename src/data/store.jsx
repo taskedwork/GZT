@@ -1102,6 +1102,27 @@ export function AppProvider({ children }) {
         dispatch({ type: 'SET_GIST_LAST_SYNC', payload: now })
       }
 
+      // 持久化到 IndexedDB / 后端（确保刷新或重新登录后数据不丢失）
+      await new Promise(r => setTimeout(r, 0))  // 等待 dispatch 生效，stateRef 更新
+      if (frontendModeRef.current) {
+        try {
+          await dbSaveProject({
+            id: 'default',
+            mmNodes: stateRef.current.mmNodes,
+            mmEdges: stateRef.current.mmEdges,
+            nodeStyles: stateRef.current.nodeStyles,
+            nodeLabels: stateRef.current.nodeLabels,
+            nodeFontStyles: stateRef.current.nodeFontStyles,
+            customPositions: stateRef.current.customPositions,
+            updatedAt: new Date().toISOString(),
+          })
+        } catch (err) {
+          console.error('同步后保存到 IndexedDB 失败:', err)
+        }
+      } else {
+        saveToServer()
+      }
+
       dispatch({ type: 'CLEAR_PENDING_SYNC' })
     } finally {
       setTimeout(() => { syncLockRef.current = false }, 500)
