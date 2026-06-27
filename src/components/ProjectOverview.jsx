@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿/**
  * 项目总览 v5 - 支持创建项目 & 添加任务 & 数据存储/导出导入
  * 项目 = 根节点，任务 = 子节点
  */
@@ -481,8 +481,9 @@ export default function ProjectOverview() {
     setEditingTask(null)
   }
 
-  // 删除（deleteNodes 已内置 pushHistory），删除前确认
+  // 删除（deleteNodes 已内置 pushHistory），删除前确认（仅管理员可删除）
   const handleDelete = (node) => {
+    if (state.currentUser?.systemRole !== 'manager') return
     const isProject = node.type === 'project'
     const childCount = isProject
       ? state.mmEdges.filter(e => e.from === node.id).length
@@ -703,6 +704,7 @@ export default function ProjectOverview() {
                       >
                         ✎
                       </button>
+                      {state.currentUser?.systemRole === 'manager' && (
                       <button
                         className="btn-icon-sm btn-icon-danger"
                         title="删除项目"
@@ -710,6 +712,7 @@ export default function ProjectOverview() {
                       >
                         ✕
                       </button>
+                      )}
                     </div>
                     {/* 进度条 - 在标题栏底部 */}
                     {tasks.length > 0 && (
@@ -812,7 +815,7 @@ export default function ProjectOverview() {
                                     {task.priority === 'Q0' ? '🔥' : task.priority === 'Q1' ? '📋' : task.priority === 'Q2' ? '⚡' : '🍃'}
                                   </span>}
                                   {(isManager || task.createdBy === state.currentUser?.name) && <button className="btn-icon-sm" disabled={task.status === 'done'} onClick={() => openEditTask(task)} title="编辑" style={{ fontSize: '.65rem' }}>编辑</button>}
-                                  {(isManager || task.createdBy === state.currentUser?.name) && <button className="btn-icon-sm btn-icon-danger" onClick={() => handleDelete(task)} title="删除" style={{ fontSize: '.62rem' }}>删除</button>}
+                                  {isManager && <button className="btn-icon-sm btn-icon-danger" onClick={() => handleDelete(task)} title="删除" style={{ fontSize: '.62rem' }}>删除</button>}
                                 </div>
                               </div>
                               {/* 第二行：元数据（协作编辑、描述、截止日期） */}
